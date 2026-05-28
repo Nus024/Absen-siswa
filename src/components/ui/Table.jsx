@@ -46,7 +46,7 @@ export default function Table({
                 </td>
               </tr>
             ) : (
-              data.map((row) => (
+              data.map((row, rowIndex) => (
                 <tr key={keyExtractor(row)} className={styles.tr}>
                   {columns.map((col) => (
                     <td
@@ -55,7 +55,7 @@ export default function Table({
                       style={{ textAlign: col.align ?? 'left' }}
                     >
                       {col.render
-                        ? col.render(row[col.key], row)
+                        ? col.render(row[col.key], row, rowIndex)
                         : String(row[col.key] ?? '—')}
                     </td>
                   ))}

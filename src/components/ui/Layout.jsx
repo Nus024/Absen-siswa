@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Users, QrCode, ClipboardList, Settings, LogOut } from 'lucide-react';
 import styles from './Layout.module.css';
@@ -7,10 +7,25 @@ export default function Layout({ user, onLogout, children }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [appName, setAppName] = useState(() => localStorage.getItem('school_name') || 'Absensi QR');
+  const [appLogo, setAppLogo] = useState(() => localStorage.getItem('school_logo') || '');
+
+  useEffect(() => {
+    function handleUpdate() {
+      setAppName(localStorage.getItem('school_name') || 'Absensi QR');
+      setAppLogo(localStorage.getItem('school_logo') || '');
+    }
+    window.addEventListener('app_settings_changed', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('app_settings_changed', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
+
   const navItems = [
     { label: 'Scanner', icon: <QrCode size={20} />, path: '/scanner' },
-    { label: 'Rekap Harian', icon: <ClipboardList size={20} />, path: '/rekap-harian' },
-    { label: 'Rekap Bulanan', icon: <ClipboardList size={20} />, path: '/rekap-bulanan' },
+    { label: 'Rekap Absensi', icon: <ClipboardList size={20} />, path: '/rekap' },
     { label: 'Izin / Keluar', icon: <Users size={20} />, path: '/izin-keluar' },
     { label: 'Pengaturan', icon: <Settings size={20} />, path: '/atur' },
   ];
@@ -20,18 +35,26 @@ export default function Layout({ user, onLogout, children }) {
       <aside className={styles.sidebar}>
         <div className={styles.sidebarHeader}>
           <div className={styles.logo}>
-            <span className={styles.logoIcon}>A</span>
-            <span className={styles.logoText}>Absensi QR</span>
+            {appLogo ? (
+              <img src={appLogo} alt="Logo" className={styles.logoIcon} style={{ objectFit: 'cover' }} />
+            ) : (
+              <span className={styles.logoIcon}>
+                {appName ? appName.charAt(0).toUpperCase() : 'A'}
+              </span>
+            )}
+            <span className={styles.logoText}>{appName}</span>
           </div>
         </div>
         <nav className={styles.nav}>
           {navItems.map((item) => {
-            const isActive = location.pathname.startsWith(item.path);
+            const isActive = item.path === '/rekap'
+              ? location.pathname.startsWith('/rekap-harian') || location.pathname.startsWith('/rekap-bulanan')
+              : location.pathname.startsWith(item.path);
             return (
               <button
                 key={item.path}
                 className={`${styles.navItem} ${isActive ? styles.active : ''}`}
-                onClick={() => navigate(item.path)}
+                onClick={() => navigate(item.path === '/rekap' ? '/rekap-harian' : item.path)}
               >
                 <span className={styles.navIcon}>{item.icon}</span>
                 <span className={styles.navLabel}>{item.label}</span>

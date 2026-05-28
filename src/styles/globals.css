@@ -231,3 +231,209 @@ h4, .h4 {
   h2, .h2 { font-size: var(--text-xl);  }
   h3, .h3 { font-size: var(--text-lg);  }
 }
+
+/* ============================================
+   MODAL / OVERLAY
+   ============================================ */
+
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  animation: scrimIn 180ms ease;
+}
+
+@keyframes scrimIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal-panel {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.28);
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: panelIn 220ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+@keyframes panelIn {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to   { opacity: 1; transform: scale(1)   translateY(0);    }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5) var(--space-6);
+}
+
+.modal-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.modal-close:hover {
+  background: var(--color-neutral-100);
+  color: var(--text-primary);
+}
+
+.modal-divider {
+  height: 1px;
+  background: var(--border-default);
+  margin: 0;
+}
+
+.modal-body {
+  padding: var(--space-6);
+}
+
+.modal-footer {
+  padding: var(--space-4) var(--space-6) var(--space-6);
+}
+
+/* ============================================
+   FIELD (form inputs)
+   ============================================ */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.field-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.field-input {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-3);
+  height: 42px;
+  width: 100%;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  outline: none;
+  appearance: none;
+}
+.field-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+}
+
+/* extra inset bg token */
+:root {
+  --bg-inset:        var(--color-neutral-100);
+  --border-subtle:   var(--color-neutral-100);
+  --text-tertiary:   var(--color-neutral-400);
+  --stack-0-gap:     0;
+  --color-hadir:     var(--color-success);
+}
+
+.stack-0  { display: flex; flex-direction: column; gap: 0; }
+
+/* ============================================
+   PRINT SYSTEM
+   ============================================ */
+@media print {
+  #root, .modal-scrim {
+    display: none !important;
+  }
+  
+  .print-container {
+    display: block !important;
+    width: 100%;
+    font-family: var(--font-sans), sans-serif;
+    color: #000;
+    background: #fff;
+    padding: 0;
+    margin: 0;
+  }
+  
+  .print-header {
+    margin-bottom: 20px;
+    border-bottom: 2px solid #333;
+    padding-bottom: 12px;
+  }
+  
+  .print-title {
+    font-size: 22px;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin: 0 0 6px 0;
+    letter-spacing: -0.5px;
+  }
+  
+  .print-meta-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 16px;
+    font-size: 13px;
+    margin-top: 10px;
+  }
+  
+  .print-meta-label {
+    font-weight: 600;
+    color: #444;
+  }
+  
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+    font-size: 12px;
+  }
+  
+  .print-table th, .print-table td {
+    border: 1px solid #222 !important;
+    padding: 8px 10px;
+  }
+  
+  .print-table th {
+    background-color: #f5f5f5 !important;
+    font-weight: bold;
+    text-align: left;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  
+  .print-table td.center, .print-table th.center {
+    text-align: center;
+  }
+}
+
+.print-container {
+  display: none;
+}

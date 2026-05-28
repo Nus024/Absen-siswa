@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { absensiDB, siswaDB, kelasDB, sesiDB } from '../lib/localDB';
 import { STATUS_ABSENSI, todayStr, formatTanggal, DAYS_ID } from '../lib/constants';
@@ -11,6 +12,8 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Badge from '../components/ui/Badge';
 import StatCard from '../components/ui/StatCard';
+import Select from '../components/ui/Select';
+import DatePicker from '../components/ui/DatePicker';
 
 const STATUS_CONFIG = {
   hadir:      { code: 'H', label: 'Hadir',      variant: 'hadir' },
@@ -191,23 +194,64 @@ export function RekapHarianPage({ user }) {
         }
       />
 
-      <div className="row-3" style={{ borderBottom: '1px solid var(--border-default)', paddingBottom: 8 }}>
-        <Link to="/rekap-harian" style={{ fontWeight: 'bold', color: 'var(--color-primary-600)', textDecoration: 'none', borderBottom: '2px solid var(--color-primary-600)', paddingBottom: 8 }}>Harian</Link>
-        <Link to="/rekap-bulanan" style={{ color: 'var(--text-secondary)', textDecoration: 'none', paddingBottom: 8, marginLeft: 16 }}>Bulanan</Link>
+      <div style={{
+        display: 'inline-flex',
+        background: 'var(--color-neutral-100)',
+        padding: '3px',
+        borderRadius: '8px',
+        alignSelf: 'flex-start',
+      }}>
+        <Link to="/rekap-harian" style={{
+          padding: '6px 14px',
+          borderRadius: '6px',
+          fontSize: '11px',
+          fontWeight: '600',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          textDecoration: 'none',
+          background: 'var(--bg-card)',
+          color: 'var(--color-primary-600)',
+          boxShadow: 'var(--shadow-xs)',
+          transition: 'all 150ms'
+        }}>Harian</Link>
+        <Link to="/rekap-bulanan" style={{
+          padding: '6px 14px',
+          borderRadius: '6px',
+          fontSize: '11px',
+          fontWeight: '600',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          textDecoration: 'none',
+          background: 'transparent',
+          color: 'var(--text-secondary)',
+          transition: 'all 150ms'
+        }}>Bulanan</Link>
       </div>
 
       {/* Toolbar */}
-      <Card padding="sm">
-        <div className="row-4" style={{ flexWrap: 'wrap' }}>
-          <select className="field-input" style={{ width: 'auto', height: 38 }} value={kelasId} onChange={e => setKelasId(e.target.value)}>
-            {kelasList.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
-          </select>
-          <input type="date" className="field-input" style={{ width: 'auto', height: 38 }} value={tanggal} onChange={e => setTanggal(e.target.value)} />
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <Input icon={<Search size={16} />} placeholder="Cari nama atau NIS…" value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
+      <div style={{
+        background: 'var(--color-neutral-50)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: '12px',
+        padding: '12px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        flexWrap: 'wrap',
+      }}>
+        <Select
+          value={kelasId}
+          onChange={setKelasId}
+          options={kelasList.map(k => ({ value: k.id, label: k.nama }))}
+        />
+        <DatePicker
+          value={tanggal}
+          onChange={setTanggal}
+        />
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <Input icon={<Search size={16} />} placeholder="Cari nama atau NIS…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-      </Card>
+      </div>
 
       <div className="grid-stats">
         <StatCard label="Hadir" value={summary.H} color="green" icon={<span style={{fontWeight:'bold'}}>H</span>} />
@@ -222,6 +266,66 @@ export function RekapHarianPage({ user }) {
         keyExtractor={row => row.id}
         emptyMessage="Pilih kelas atau tidak ada siswa"
       />
+
+      {createPortal(
+        <div className="print-container">
+          <div className="print-header">
+            <h1 className="print-title">Rekap Absensi Harian — {(localStorage.getItem('school_name') || 'Absensi QR').toUpperCase()}</h1>
+            <div className="print-meta-grid">
+              <span className="print-meta-label">Kelas:</span>
+              <span>{kelas?.nama || '—'}</span>
+              <span className="print-meta-label">Hari / Tanggal:</span>
+              <span>{hariStr}</span>
+            </div>
+          </div>
+          
+          <table className="print-table">
+            <thead>
+              <tr>
+                <th className="center" style={{ width: '40px', textAlign: 'center' }}>NO</th>
+                <th style={{ width: '120px' }}>NIS</th>
+                <th>NAMA SISWA</th>
+                <th className="center" style={{ width: '60px', textAlign: 'center' }}>H</th>
+                <th className="center" style={{ width: '60px', textAlign: 'center' }}>I</th>
+                <th className="center" style={{ width: '60px', textAlign: 'center' }}>S</th>
+                <th className="center" style={{ width: '60px', textAlign: 'center' }}>A</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="center" style={{ textAlign: 'center' }}>Tidak ada data</td>
+                </tr>
+              ) : (
+                filtered.map((sw, idx) => {
+                  let H = 0, I = 0, S = 0, A = 0;
+                  sesis.forEach(se => {
+                    const rec = absensiMap[`${sw.id}_${se.id}`];
+                    const st = rec?.status;
+                    if (st === 'hadir') H++;
+                    else if (st === 'izin') I++;
+                    else if (st === 'sakit') S++;
+                    else if (st === 'dispensasi') H++; // dispensasi counts as Hadir
+                    else A++; // default/alpha
+                  });
+                  return (
+                    <tr key={sw.id}>
+                      <td className="center" style={{ textAlign: 'center' }}>{idx + 1}</td>
+                      <td>{sw.nis}</td>
+                      <td>{sw.nama}</td>
+                      <td className="center" style={{ textAlign: 'center' }}>{H}</td>
+                      <td className="center" style={{ textAlign: 'center' }}>{I}</td>
+                      <td className="center" style={{ textAlign: 'center' }}>{S}</td>
+                      <td className="center" style={{ textAlign: 'center' }}>{A}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

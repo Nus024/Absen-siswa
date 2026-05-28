@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { absensiDB, siswaDB, kelasDB, sesiDB } from '../lib/localDB';
 import { STATUS_ABSENSI, MONTHS_ID } from '../lib/constants';
@@ -8,6 +9,7 @@ import Header from '../components/ui/Header';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
+import Select from '../components/ui/Select';
 
 export function RekapBulananPage({ user }) {
   const now = new Date();
@@ -90,24 +92,67 @@ export function RekapBulananPage({ user }) {
         }
       />
 
-      <div className="row-3" style={{ borderBottom: '1px solid var(--border-default)', paddingBottom: 8 }}>
-        <Link to="/rekap-harian" style={{ color: 'var(--text-secondary)', textDecoration: 'none', paddingBottom: 8 }}>Harian</Link>
-        <Link to="/rekap-bulanan" style={{ fontWeight: 'bold', color: 'var(--color-primary-600)', textDecoration: 'none', borderBottom: '2px solid var(--color-primary-600)', paddingBottom: 8, marginLeft: 16 }}>Bulanan</Link>
+      <div style={{
+        display: 'inline-flex',
+        background: 'var(--color-neutral-100)',
+        padding: '3px',
+        borderRadius: '8px',
+        alignSelf: 'flex-start',
+      }}>
+        <Link to="/rekap-harian" style={{
+          padding: '6px 14px',
+          borderRadius: '6px',
+          fontSize: '11px',
+          fontWeight: '600',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          textDecoration: 'none',
+          background: 'transparent',
+          color: 'var(--text-secondary)',
+          transition: 'all 150ms'
+        }}>Harian</Link>
+        <Link to="/rekap-bulanan" style={{
+          padding: '6px 14px',
+          borderRadius: '6px',
+          fontSize: '11px',
+          fontWeight: '600',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          textDecoration: 'none',
+          background: 'var(--bg-card)',
+          color: 'var(--color-primary-600)',
+          boxShadow: 'var(--shadow-xs)',
+          transition: 'all 150ms'
+        }}>Bulanan</Link>
       </div>
 
-      <Card padding="sm">
-        <div className="row-4" style={{ flexWrap: 'wrap' }}>
-          <select className="field-input" style={{ width: 'auto', height: 38, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-card)' }} value={kelasId} onChange={e => setKelasId(e.target.value)}>
-            {kelasList.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
-          </select>
-          <select className="field-input" style={{ width: 'auto', height: 38, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-card)' }} value={bulan} onChange={e => setBulan(Number(e.target.value))}>
-            {MONTHS_ID.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-          </select>
-          <select className="field-input" style={{ width: 'auto', height: 38, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-card)' }} value={tahun} onChange={e => setTahun(Number(e.target.value))}>
-            {tahunOptions.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
-      </Card>
+      {/* Toolbar */}
+      <div style={{
+        background: 'var(--color-neutral-50)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: '12px',
+        padding: '12px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        flexWrap: 'wrap',
+      }}>
+        <Select
+          value={kelasId}
+          onChange={setKelasId}
+          options={kelasList.map(k => ({ value: k.id, label: k.nama }))}
+        />
+        <Select
+          value={bulan}
+          onChange={setBulan}
+          options={MONTHS_ID.map((m, i) => ({ value: i + 1, label: m }))}
+        />
+        <Select
+          value={tahun}
+          onChange={setTahun}
+          options={tahunOptions.map(y => ({ value: y, label: String(y) }))}
+        />
+      </div>
 
       <Card padding="none">
         <div style={{ overflowX: 'auto' }}>
@@ -153,6 +198,57 @@ export function RekapBulananPage({ user }) {
           </table>
         </div>
       </Card>
+
+      {createPortal(
+        <div className="print-container">
+          <div className="print-header">
+            <h1 className="print-title">Rekap Absensi Bulanan — {(localStorage.getItem('school_name') || 'Absensi QR').toUpperCase()}</h1>
+            <div className="print-meta-grid">
+              <span className="print-meta-label">Kelas:</span>
+              <span>{kelas?.nama || '—'}</span>
+              <span className="print-meta-label">Bulan / Tahun:</span>
+              <span>{MONTHS_ID[bulan - 1]} {tahun}</span>
+            </div>
+          </div>
+          
+          <table className="print-table">
+            <thead>
+              <tr>
+                <th className="center" style={{ width: '40px', textAlign: 'center' }}>NO</th>
+                <th style={{ width: '120px' }}>NIS</th>
+                <th>NAMA SISWA</th>
+                <th className="center" style={{ width: '60px', textAlign: 'center' }}>H</th>
+                <th className="center" style={{ width: '60px', textAlign: 'center' }}>I</th>
+                <th className="center" style={{ width: '60px', textAlign: 'center' }}>S</th>
+                <th className="center" style={{ width: '60px', textAlign: 'center' }}>A</th>
+              </tr>
+            </thead>
+            <tbody>
+              {siswas.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="center" style={{ textAlign: 'center' }}>Tidak ada data</td>
+                </tr>
+              ) : (
+                siswas.map((siswa, idx) => {
+                  const sum = getSummary(siswa.id);
+                  return (
+                    <tr key={siswa.id}>
+                      <td className="center" style={{ textAlign: 'center' }}>{idx + 1}</td>
+                      <td>{siswa.nis}</td>
+                      <td>{siswa.nama}</td>
+                      <td className="center" style={{ textAlign: 'center' }}>{sum.H}</td>
+                      <td className="center" style={{ textAlign: 'center' }}>{sum.I}</td>
+                      <td className="center" style={{ textAlign: 'center' }}>{sum.S}</td>
+                      <td className="center" style={{ textAlign: 'center' }}>{sum.A}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

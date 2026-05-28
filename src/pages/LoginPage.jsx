@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScanFace, User, KeyRound, Loader2 } from 'lucide-react';
+import { ScanFace, User, KeyRound, Loader2, Eye, EyeOff } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -8,6 +8,7 @@ export function LoginPage({ onLogin }) {
   const [form, setForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -51,12 +52,17 @@ export function LoginPage({ onLogin }) {
               width: 56, height: 56, margin: '0 auto 20px',
               background: 'var(--color-primary-500)', borderRadius: 16,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', boxShadow: '0 8px 16px rgba(16, 185, 129, 0.24)'
+              color: '#fff', boxShadow: '0 8px 16px rgba(16, 185, 129, 0.24)',
+              overflow: 'hidden'
             }}>
-              <ScanFace size={32} strokeWidth={2} />
+              {localStorage.getItem('school_logo') ? (
+                <img src={localStorage.getItem('school_logo')} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <ScanFace size={32} strokeWidth={2} />
+              )}
             </div>
             <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
-              Absensi Siswa
+              {localStorage.getItem('school_name') || 'Absensi Siswa'}
             </h1>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginTop: 6 }}>
               Silakan masuk untuk melanjutkan
@@ -87,12 +93,31 @@ export function LoginPage({ onLogin }) {
 
             <Input
               id="login-password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               placeholder="Password"
               icon={<KeyRound size={18} />}
               value={form.password}
               onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
               autoComplete="current-password"
+              suffix={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--text-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: 0,
+                    outline: 'none',
+                  }}
+                  title={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              }
             />
 
             <Button
@@ -109,16 +134,7 @@ export function LoginPage({ onLogin }) {
             </Button>
           </form>
 
-          {/* Demo hint */}
-          <div style={{
-            marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border-default)',
-            fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'center',
-            lineHeight: 1.6
-          }}>
-            <strong style={{ color: 'var(--text-secondary)' }}>Akun Demo:</strong><br />
-            Admin: <code style={{ color: 'var(--text-secondary)' }}>admin</code> / <code>admin123</code><br />
-            Pengawas: <code style={{ color: 'var(--text-secondary)' }}>pengawas</code> / <code>pengawas123</code>
-          </div>
+
         </Card>
       </div>
     </div>

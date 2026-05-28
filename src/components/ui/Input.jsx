@@ -1,7 +1,7 @@
 import React from 'react';
 import styles from './Input.module.css';
 
-export default function Input({ label, error, hint, icon, id, ...props }) {
+export default function Input({ label, error, hint, icon, suffix, id, ...props }) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
   return (
     <div className={styles.field}>
@@ -10,9 +10,15 @@ export default function Input({ label, error, hint, icon, id, ...props }) {
         {icon && <span className={styles.icon}>{icon}</span>}
         <input
           id={inputId}
-          className={[styles.input, icon ? styles.withIcon : '', error ? styles.hasError : ''].join(' ')}
+          className={[
+            styles.input,
+            icon ? styles.withIcon : '',
+            suffix ? styles.withSuffix : '',
+            error ? styles.hasError : ''
+          ].join(' ')}
           {...props}
         />
+        {suffix && <span className={styles.suffix}>{suffix}</span>}
       </div>
       {error && <p className={styles.error}>{error}</p>}
       {hint && !error && <p className={styles.hint}>{hint}</p>}

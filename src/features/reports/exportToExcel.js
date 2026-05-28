@@ -9,8 +9,9 @@ export function exportRekapBulanan({ siswas, absensiMap, sesis, bulan, tahun, na
   const daysInMonth = new Date(tahun, bulan, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
+  const schoolName = localStorage.getItem('school_name') || 'Absensi QR';
   // Header baris 1: judul
-  const judulRow = [`REKAP ABSENSI BULANAN — ${namaKelas || 'SEMUA KELAS'}`];
+  const judulRow = [`REKAP ABSENSI BULANAN — ${schoolName.toUpperCase()} — ${namaKelas || 'SEMUA KELAS'}`];
   const periodeRow = [`Periode: ${MONTHS_ID[bulan - 1]} ${tahun}`];
   const blankRow = [];
 
@@ -67,8 +68,9 @@ export function exportRekapHarian({ siswas, absensiByDate, sesis, tanggal, namaK
     return [idx + 1, siswa.nis, siswa.nama, siswa.kelas_nama || '', ...sesiValues, totalHadir];
   });
 
+  const schoolName = localStorage.getItem('school_name') || 'Absensi QR';
   const aoa = [
-    [`REKAP ABSENSI HARIAN — ${namaKelas || 'SEMUA KELAS'}`],
+    [`REKAP ABSENSI HARIAN — ${schoolName.toUpperCase()} — ${namaKelas || 'SEMUA KELAS'}`],
     [`Tanggal: ${new Date(tanggal + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`],
     [],
     headerRow,
