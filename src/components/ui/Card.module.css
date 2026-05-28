@@ -19,6 +19,7 @@
 }
 
 @media (max-width: 640px) {
-  .pad-lg { padding: var(--space-5); }
-  .pad-md { padding: var(--space-4); }
+  .pad-lg { padding: var(--space-4); }
+  .pad-md { padding: var(--space-3); }
+  .pad-sm { padding: var(--space-2); }
 }

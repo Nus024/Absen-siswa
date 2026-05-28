@@ -1,21 +1,18 @@
 // ============================================================
-// App.jsx — root dengan layout shell premium
+// App.jsx — root dengan layout shell premium + Supabase auth
 // ============================================================
 import { Component } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
-import { seedIfEmpty } from './lib/localDB';
 import Layout from './components/ui/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { ScannerPage } from './pages/ScannerPage';
 import { RekapHarianPage } from './pages/RekapHarianPage';
 import { RekapBulananPage } from './pages/RekapBulananPage';
-
 import { IzinKeluarPage } from './pages/IzinKeluarPage';
 import { AdminPage } from './pages/AdminPage';
+import { QRManagementPage } from './pages/QRManagementPage';
 import { ThemeProvider } from './hooks/useTheme';
-
-seedIfEmpty();
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -60,34 +57,34 @@ class ErrorBoundary extends Component {
   }
 }
 
-
-
 export default function App() {
   const { user, login, logout } = useAuth();
 
-  if (!user) {
-    return <ErrorBoundary><LoginPage onLogin={login} /></ErrorBoundary>;
-  }
-
   return (
     <ThemeProvider>
-      <ErrorBoundary>
-        <BrowserRouter>
-          <Layout user={user} onLogout={logout}>
-            <Routes>
-              <Route path="/" element={<Navigate to="/scanner" replace />} />
-              <Route path="/login" element={<Navigate to="/scanner" replace />} />
-              <Route path="/scanner" element={<ScannerPage user={user} />} />
-              <Route path="/rekap-harian" element={<RekapHarianPage user={user} />} />
-              <Route path="/rekap-bulanan" element={<RekapBulananPage user={user} />} />
-              <Route path="/izin-keluar" element={<IzinKeluarPage user={user} />} />
-
-              <Route path="/atur" element={<AdminPage user={user} />} />
-              <Route path="*" element={<Navigate to="/scanner" replace />} />
-            </Routes>
-          </Layout>
-        </BrowserRouter>
-      </ErrorBoundary>
+      {!user ? (
+        <ErrorBoundary>
+          <LoginPage onLogin={login} />
+        </ErrorBoundary>
+      ) : (
+        <ErrorBoundary>
+          <BrowserRouter>
+            <Layout user={user} onLogout={logout}>
+              <Routes>
+                <Route path="/"             element={<Navigate to="/scanner" replace />} />
+                <Route path="/login"        element={<Navigate to="/scanner" replace />} />
+                <Route path="/scanner"      element={<ScannerPage user={user} />} />
+                <Route path="/rekap-harian" element={<RekapHarianPage user={user} />} />
+                <Route path="/rekap-bulanan" element={<RekapBulananPage user={user} />} />
+                <Route path="/izin-keluar"  element={<IzinKeluarPage user={user} />} />
+                <Route path="/qr"           element={<QRManagementPage user={user} />} />
+                <Route path="/atur"         element={<AdminPage user={user} onLogout={logout} />} />
+                <Route path="*"             element={<Navigate to="/scanner" replace />} />
+              </Routes>
+            </Layout>
+          </BrowserRouter>
+        </ErrorBoundary>
+      )}
     </ThemeProvider>
   );
 }

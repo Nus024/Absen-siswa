@@ -3,20 +3,27 @@ import { ScanFace, User, KeyRound, Loader2, Eye, EyeOff } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import { useTheme } from '../hooks/useTheme';
 
 export function LoginPage({ onLogin }) {
   const [form, setForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const { theme } = useTheme();
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const result = onLogin(form.username, form.password);
-    if (!result?.ok) {
-      setError(result?.error || 'Login gagal');
+    try {
+      const result = await onLogin(form.username, form.password);
+      if (!result?.ok) {
+        setError(result?.error || 'Login gagal');
+      }
+    } catch (err) {
+      setError('Gagal terhubung ke server');
+    } finally {
       setLoading(false);
     }
   }
@@ -27,57 +34,95 @@ export function LoginPage({ onLogin }) {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'var(--color-neutral-50)',
+      background: 'var(--bg-page)',
       padding: 'var(--space-6)',
       position: 'relative',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      transition: 'background var(--transition-base)'
     }}>
       {/* Background ambient gradient */}
       <div style={{
-        position: 'absolute', width: '600px', height: '600px',
-        background: 'radial-gradient(circle, var(--color-primary-200) 0%, transparent 60%)',
-        top: '-20%', left: '-10%', filter: 'blur(80px)', opacity: 0.5, zIndex: 0
+        position: 'absolute', width: '700px', height: '700px',
+        background: 'radial-gradient(circle, var(--color-primary-400) 0%, transparent 70%)',
+        top: '-15%', left: '-10%', filter: 'blur(120px)', opacity: theme === 'dark' ? 0.12 : 0.18, zIndex: 0,
+        pointerEvents: 'none'
       }} />
       <div style={{
-        position: 'absolute', width: '500px', height: '500px',
-        background: 'radial-gradient(circle, var(--color-success) 0%, transparent 70%)',
-        bottom: '-10%', right: '-10%', filter: 'blur(80px)', opacity: 0.1, zIndex: 0
+        position: 'absolute', width: '600px', height: '600px',
+        background: 'radial-gradient(circle, var(--color-primary-300) 0%, transparent 70%)',
+        bottom: '-15%', right: '-10%', filter: 'blur(120px)', opacity: theme === 'dark' ? 0.08 : 0.12, zIndex: 0,
+        pointerEvents: 'none'
       }} />
 
-      <div style={{ width: '100%', maxWidth: '420px', position: 'relative', zIndex: 1 }}>
-        <Card padding="lg" style={{ boxShadow: 'var(--shadow-xl)' }}>
+      <div style={{ width: '100%', maxWidth: '400px', position: 'relative', zIndex: 1 }}>
+        <Card
+          padding="lg"
+          style={{
+            borderRadius: '24px',
+            boxShadow: theme === 'dark'
+              ? '0 24px 48px -12px rgba(0, 0, 0, 0.45), 0 0 1px 1px var(--border-default)'
+              : '0 24px 48px -12px rgba(0, 0, 0, 0.06), 0 0 1px 1px var(--border-default)',
+            border: 'none',
+            padding: 'var(--login-card-padding, 40px 36px)',
+            background: 'var(--bg-card)',
+            transition: 'background var(--transition-base), box-shadow var(--transition-base)'
+          }}
+        >
           {/* Brand */}
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
             <div style={{
-              width: 56, height: 56, margin: '0 auto 20px',
-              background: 'var(--color-primary-500)', borderRadius: 16,
+              width: 68, height: 68, margin: '0 auto 20px',
+              background: 'var(--color-primary-500)', borderRadius: 20,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', boxShadow: '0 8px 16px rgba(16, 185, 129, 0.24)',
-              overflow: 'hidden'
+              color: '#fff',
+              boxShadow: '0 10px 25px -4px var(--color-primary-300)',
+              overflow: 'hidden',
+              border: '3.5px solid var(--bg-card)',
+              transition: 'border-color var(--transition-base), box-shadow var(--transition-base)'
             }}>
               {localStorage.getItem('school_logo') ? (
                 <img src={localStorage.getItem('school_logo')} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <ScanFace size={32} strokeWidth={2} />
+                <ScanFace size={36} strokeWidth={1.75} />
               )}
             </div>
-            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
+            <h1 style={{
+              fontSize: '22px',
+              fontWeight: 800,
+              color: 'var(--text-primary)',
+              letterSpacing: '-0.5px',
+              lineHeight: 1.25,
+              margin: 0
+            }}>
               {localStorage.getItem('school_name') || 'Absensi Siswa'}
             </h1>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginTop: 6 }}>
+            <p style={{
+              fontSize: '13px',
+              color: 'var(--text-secondary)',
+              marginTop: 6,
+              fontWeight: 500
+            }}>
               Silakan masuk untuk melanjutkan
             </p>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="stack-5">
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {error && (
               <div style={{
-                padding: '12px 16px', background: 'var(--color-danger)', color: '#fff',
-                borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)', fontWeight: 500,
-                display: 'flex', alignItems: 'center', gap: 8
+                padding: '12px 16px',
+                background: 'rgba(239, 68, 68, 0.08)',
+                color: 'var(--color-danger)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: 'var(--radius-lg)',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
               }}>
-                <span>⚠️</span> {error}
+                <span style={{ flexShrink: 0 }}>⚠️</span>
+                <span>{error}</span>
               </div>
             )}
 
@@ -112,7 +157,10 @@ export function LoginPage({ onLogin }) {
                     alignItems: 'center',
                     padding: 0,
                     outline: 'none',
+                    transition: 'color var(--transition-fast)'
                   }}
+                  onMouseOver={e => e.currentTarget.style.color = 'var(--text-primary)'}
+                  onMouseOut={e => e.currentTarget.style.color = 'var(--text-secondary)'}
                   title={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -128,13 +176,11 @@ export function LoginPage({ onLogin }) {
               fullWidth
               loading={loading}
               disabled={loading || !form.username || !form.password}
-              style={{ marginTop: 8 }}
+              style={{ marginTop: 8, height: '46px', borderRadius: '12px' }}
             >
               Masuk
             </Button>
           </form>
-
-
         </Card>
       </div>
     </div>

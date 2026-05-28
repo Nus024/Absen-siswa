@@ -1,31 +1,135 @@
 // ============================================================
 // pages/QRManagementPage.jsx — Premium QR management
 // ============================================================
-import { useState, useEffect, useMemo } from 'react';
-import { siswaDB, kelasDB } from '../lib/localDB';
-import { generateQRDataUrl, generateQRBatch } from '../features/qr/QRGenerator';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Download as DownloadIcon } from 'lucide-react';
+import { siswaService } from '../lib/db/siswa';
+import { kelasService } from '../lib/db/kelas';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import Button from '../components/ui/Button';
 
+// ── PreviewKtsModal (Menggambar KTS pada canvas) ─────────────────
+function PreviewKtsModal({ siswa, onClose }) {
+  const canvasRef = useRef(null);
+  const [loading, setLoading] = useState(true);
+  const [kelasNamaStr, setKelasNamaStr] = useState('—');
+
+  useEffect(() => {
+    kelasService.getById(siswa.kelas_id)
+      .then(k => setKelasNamaStr(k?.nama || '—'))
+      .catch(() => {});
+  }, [siswa.kelas_id]);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    setLoading(true);
+    kelasService.getById(siswa.kelas_id)
+      .then(kelas => {
+        const kelasNama = kelas?.nama || '—';
+        const payload = `${siswa.nis}::${siswa.nama}`;
+        return import('../features/qr/ktsDraw').then(({ drawKtsCard }) => {
+          drawKtsCard(canvasRef.current, {
+            nis: siswa.nis, nama: siswa.nama, kelasNama, qrToken: payload
+          }, () => setLoading(false));
+        });
+      })
+      .catch(err => { console.error(err); setLoading(false); });
+  }, [siswa]);
+
+  function downloadKts() {
+    if (!canvasRef.current) return;
+    canvasRef.current.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeName = siswa.nama.replace(/[^a-zA-Z0-9\u00C0-\u00FF ]/g, '').trim().replace(/\s+/g, '_');
+      a.href = url;
+      a.download = `KTS_${safeName}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 'image/jpeg', 0.95);
+  }
+
+
+  return (
+    <div className="modal-scrim" onClick={onClose}>
+      <div className="modal-panel" style={{ maxWidth: 520, width: '90%', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 className="modal-title">Kartu Tanda Siswa (KTS)</h3>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-divider" />
+        <div className="modal-body" style={{ textAlign: 'center', paddingTop: 20 }}>
+          <div style={{
+            background: 'var(--bg-inset)',
+            borderRadius: 12,
+            padding: 8,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            display: 'inline-block',
+            width: '100%',
+            overflow: 'hidden',
+            position: 'relative'
+          }}>
+            {loading && (
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(255,255,255,0.7)',
+                zIndex: 10
+              }}>
+                <span className="spinner" />
+              </div>
+            )}
+            <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 'auto', borderRadius: 6 }} />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>{siswa.nama}</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              NIS: {siswa.nis} &middot; {kelasNamaStr}
+            </div>
+          </div>
+        </div>
+        <div className="modal-footer" style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+          <Button variant="ghost" onClick={onClose}>Tutup</Button>
+          <Button variant="primary" icon={<DownloadIcon size={16} />} onClick={downloadKts} disabled={loading}>
+            Unduh KTS
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────
 export function QRManagementPage({ user }) {
-  const [kelasList, setKelasList]     = useState([]);
-  const [kelasId, setKelasId]         = useState('');
-  const [siswas, setSiswas]           = useState([]);
-  const [search, setSearch]           = useState('');
+  const [kelasList, setKelasList]       = useState([]);
+  const [kelasId, setKelasId]           = useState('');
+  const [siswas, setSiswas]             = useState([]);
+  const [search, setSearch]             = useState('');
   const [previewSiswa, setPreviewSiswa] = useState(null);
-  const [previewQr, setPreviewQr]     = useState('');
   const [loadingPrint, setLoadingPrint] = useState(false);
-  const [confirmData, setConfirmData] = useState(null);
+  const [confirmData, setConfirmData]   = useState(null);
+  const [loading, setLoading]           = useState(true);
   const canAdmin = user?.role === 'admin';
 
   useEffect(() => {
-    const kls = kelasDB.getAll();
-    setKelasList(kls);
-    if (kls.length > 0) setKelasId(kls[0].id);
+    kelasService.getAll().then(kls => {
+      setKelasList(kls);
+      if (kls.length > 0) setKelasId(kls[0].id);
+    }).catch(console.error);
   }, []);
 
   useEffect(() => {
     if (!kelasId) return;
-    setSiswas(siswaDB.getByKelas(kelasId));
+    setLoading(true);
+    siswaService.getByKelas(kelasId)
+      .then(setSiswas)
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [kelasId]);
 
   const filtered = useMemo(() => {
@@ -34,79 +138,79 @@ export function QRManagementPage({ user }) {
     return siswas.filter(s => s.nama.toLowerCase().includes(q) || s.nis.includes(q));
   }, [siswas, search]);
 
-  async function openPreview(siswa) {
-    const url = await generateQRDataUrl(siswa.qr_token, 256);
-    setPreviewQr(url);
-    setPreviewSiswa(siswa);
-  }
-
   async function handlePrintSatu(siswa) {
-    const kelas = kelasDB.getById(siswa.kelas_id);
-    const qrUrl = await generateQRDataUrl(siswa.qr_token, 200);
-    const w = window.open('', '_blank', 'width=320,height=450');
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-      <title>QR — ${siswa.nama}</title>
-      <style>
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family: -apple-system, sans-serif; display:flex; justify-content:center; padding:10px; background:#fff; }
-        .card { width:6.5cm; border:1px solid #ddd; border-radius:8px; padding:14px; text-align:center; }
-        .school { font-size:6.5pt; color:#888; text-transform:uppercase; letter-spacing:0.5px; }
-        hr { border:none; border-top:1px solid #eee; margin:6px 0; }
-        img { width:3cm; height:3cm; margin:8px auto; display:block; }
-        .name { font-size:10pt; font-weight:700; margin-top:6px; color:#1C1C1E; }
-        .nis { font-size:8.5pt; color:#6E6E73; margin-top:2px; font-family:monospace; }
-        .kelas { font-size:9pt; color:#1C1C1E; font-weight:500; margin-top:2px; }
-        @media print { @page { margin:0.5cm; } }
-      </style></head>
-      <body><div class="card">
-        <div class="school">Kartu Absensi Siswa</div>
-        <hr><img src="${qrUrl}" alt="QR">
-        <div class="name">${siswa.nama}</div>
-        <div class="nis">NIS ${siswa.nis}</div>
-        <div class="kelas">${kelas?.nama || ''}</div>
-      </div>
-      <script>window.onload=()=>window.print();</script></body></html>`);
-    w.document.close();
+    const kelas = await kelasService.getById(siswa.kelas_id);
+    const { drawKtsCard } = await import('../features/qr/ktsDraw');
+
+    const canvas = document.createElement('canvas');
+    drawKtsCard(canvas, {
+      nis: siswa.nis,
+      nama: siswa.nama,
+      kelasNama: kelas?.nama || '—',
+      qrToken: `${siswa.nis}::${siswa.nama}`
+    }, () => {
+      const cardDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      const w = window.open('', '_blank', 'width=520,height=380');
+      w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+        <title>KTS — ${siswa.nama}</title>
+        <style>
+          * { margin:0; padding:0; box-sizing:border-box; }
+          body { font-family:-apple-system, sans-serif; display:flex; justify-content:center; padding:0; background:#fff; }
+          .card-img { width:8.6cm; height:5.4cm; display:block; object-fit:contain; }
+          @media print { @page { size: 8.6cm 5.4cm; margin:0; } }
+        </style></head>
+        <body>
+          <img src="${cardDataUrl}" alt="KTS Card" class="card-img">
+          <script>window.onload=()=>{ window.print(); setTimeout(()=>window.close(), 100); };<\/script>
+        </body></html>`);
+      w.document.close();
+    });
   }
 
   async function handlePrintKelas() {
     setLoadingPrint(true);
-    const kelas = kelasDB.getById(kelasId);
-    const data  = await generateQRBatch(siswas);
+    const kelas = await kelasService.getById(kelasId);
+    const { drawKtsCard } = await import('../features/qr/ktsDraw');
+    const canvas = document.createElement('canvas');
+
+    const renderedCards = [];
+    for (const siswa of siswas) {
+      await new Promise((resolve) => {
+        drawKtsCard(canvas, {
+          nis: siswa.nis,
+          nama: siswa.nama,
+          kelasNama: kelas?.nama || '—',
+          qrToken: `${siswa.nis}::${siswa.nama}`
+        }, () => {
+          renderedCards.push({
+            nama: siswa.nama,
+            dataUrl: canvas.toDataURL('image/jpeg', 0.92)
+          });
+          resolve();
+        });
+      });
+    }
+
     setLoadingPrint(false);
+
     const w = window.open('', '_blank', 'width=960,height=720');
     w.document.write(`<!DOCTYPE html><html lang="id"><head>
       <meta charset="UTF-8">
-      <title>Cetak QR — ${kelas?.nama}</title>
+      <title>Cetak KTS Kelas — ${kelas?.nama}</title>
       <style>
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:-apple-system,sans-serif; background:#fff; }
-        .grid { display:flex; flex-wrap:wrap; padding:4px; gap:4px; }
-        .card {
-          width:6.5cm; height:9cm; border:1px solid #ddd; border-radius:8px;
-          margin:2px; padding:12px; text-align:center;
-          page-break-inside:avoid; display:flex; flex-direction:column;
-          align-items:center; justify-content:center; gap:4px;
+        body { font-family:-apple-system,sans-serif; background:#fff; padding:1.5cm 1cm; }
+        .grid { display:flex; flex-wrap:wrap; gap:0.4cm 0.6cm; justify-content:flex-start; }
+        .card-img {
+          width:8.6cm; height:5.4cm; border:1px solid #e5e7eb; border-radius:6px;
+          page-break-inside:avoid; display:block;
         }
-        .school { font-size:6.5pt; color:#888; text-transform:uppercase; letter-spacing:0.5px; }
-        hr { width:80%; border:none; border-top:1px solid #eee; margin:3px auto; }
-        img { width:2.8cm; height:2.8cm; }
-        .name { font-size:10pt; font-weight:700; color:#1C1C1E; margin-top:4px; }
-        .nis { font-size:8pt; color:#6E6E73; font-family:monospace; }
-        .kelas { font-size:9pt; font-weight:500; color:#1C1C1E; }
-        @media print { @page{margin:0.5cm;} }
+        @media print { @page{ margin:1cm; } }
       </style></head>
       <body><div class="grid">
-        ${data.map(s => `<div class="card">
-          <div class="school">Kartu Absensi Siswa</div>
-          <hr>
-          <img src="${s.qrDataUrl}" alt="QR ${s.nama}">
-          <div class="name">${s.nama}</div>
-          <div class="nis">NIS ${s.nis}</div>
-          <div class="kelas">${kelas?.nama || ''}</div>
-        </div>`).join('')}
+        ${renderedCards.map(c => `<img src="${c.dataUrl}" alt="KTS ${c.nama}" class="card-img">`).join('')}
       </div>
-      <script>window.onload=()=>window.print();</script></body></html>`);
+      <script>window.onload=()=>{ window.print(); };<\/script></body></html>`);
     w.document.close();
   }
 
@@ -114,9 +218,14 @@ export function QRManagementPage({ user }) {
     setConfirmData({
       title: 'Reset QR Code',
       message: `Reset QR untuk ${siswa.nama}? QR lama tidak akan berlaku lagi.`,
-      onConfirm: () => {
-        siswaDB.regenerateQr(siswa.id);
-        setSiswas(siswaDB.getByKelas(kelasId));
+      onConfirm: async () => {
+        try {
+          await siswaService.regenerateQr(siswa.id);
+          const fresh = await siswaService.getByKelas(kelasId);
+          setSiswas(fresh);
+        } catch (err) {
+          alert('Gagal reset QR: ' + (err?.message || 'Error'));
+        }
         setConfirmData(null);
       }
     });
@@ -126,7 +235,7 @@ export function QRManagementPage({ user }) {
     <div>
       <div className="page-header">
         <div className="page-header-left">
-          <h1 className="page-title">Manajemen QR</h1>
+          <h1 className="page-title">Manajemen KTS &amp; QR</h1>
         </div>
         <div className="page-header-actions">
           <button
@@ -139,7 +248,7 @@ export function QRManagementPage({ user }) {
               ? <><span className="spinner" />&ensp;Menyiapkan…</>
               : <>
                   <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                  Cetak QR Kelas ({siswas.length})
+                  Cetak KTS Kelas ({siswas.length})
                 </>
             }
           </button>
@@ -180,7 +289,7 @@ export function QRManagementPage({ user }) {
                     </div>
                   </td></tr>
                 ) : filtered.map((siswa, idx) => {
-                  const kelas = kelasDB.getById(siswa.kelas_id);
+                  const kelas = kelasList.find(k => k.id === siswa.kelas_id);
                   return (
                     <tr key={siswa.id}>
                       <td className="td-num">{idx + 1}</td>
@@ -203,7 +312,7 @@ export function QRManagementPage({ user }) {
                       <td>
                         <div className="td-actions">
                           <button id={`btn-preview-${siswa.id}`} className="btn btn-sm"
-                            onClick={() => openPreview(siswa)}>
+                            onClick={() => setPreviewSiswa(siswa)}>
                             Preview
                           </button>
                           <button id={`btn-print-${siswa.id}`} className="btn btn-sm"
@@ -226,76 +335,17 @@ export function QRManagementPage({ user }) {
           </div>
           <div className="card-footer">
             <span>{filtered.length} dari {siswas.length} siswa</span>
-            <span>Layout cetak 6.5 × 9 cm · ~12 kartu/halaman A4</span>
+            <span>Layout cetak KTS 8.6 × 5.4 cm &middot; ~10 kartu/halaman A4</span>
           </div>
         </div>
       </div>
 
       {/* Preview Modal */}
       {previewSiswa && (
-        <div className="modal-scrim" onClick={() => setPreviewSiswa(null)}>
-          <div className="modal-panel" style={{ maxWidth: 360 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">Preview QR Code</h3>
-              <button className="modal-close" onClick={() => setPreviewSiswa(null)}>✕</button>
-            </div>
-            <div className="modal-divider" />
-            <div className="modal-body" style={{ textAlign: 'center' }}>
-              {/* Card mock */}
-              <div style={{
-                display: 'inline-flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 8,
-                background: 'var(--bg-inset)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-lg)',
-                padding: '24px 28px',
-                marginBottom: 16,
-              }}>
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                  Kartu Absensi Siswa
-                </div>
-                <div style={{ width: 1, height: 1, borderTop: '1px solid var(--border-subtle)', alignSelf: 'stretch' }} />
-                {previewQr && (
-                  <img src={previewQr} alt="QR"
-                    style={{ width: 180, height: 180, borderRadius: 8, display: 'block' }} />
-                )}
-                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
-                  {previewSiswa.nama}
-                </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>
-                  NIS {previewSiswa.nis}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
-                  {kelasDB.getById(previewSiswa.kelas_id)?.nama}
-                </div>
-              </div>
-              <div style={{
-                fontSize: 11,
-                color: 'var(--text-tertiary)',
-                fontFamily: 'var(--font-mono)',
-                wordBreak: 'break-all',
-                background: 'var(--bg-inset)',
-                padding: '8px 12px',
-                borderRadius: 'var(--radius-sm)',
-                textAlign: 'left',
-                border: '1px solid var(--border-subtle)',
-              }}>
-                SISWA:{previewSiswa.qr_token}
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn" onClick={() => setPreviewSiswa(null)}>Tutup</button>
-              <button className="btn btn-primary" onClick={() => handlePrintSatu(previewSiswa)}>
-                Cetak Kartu
-              </button>
-            </div>
-          </div>
-        </div>
+        <PreviewKtsModal siswa={previewSiswa} onClose={() => setPreviewSiswa(null)} />
       )}
 
-      <ConfirmDialog 
+      <ConfirmDialog
         isOpen={!!confirmData}
         title={confirmData?.title}
         message={confirmData?.message}

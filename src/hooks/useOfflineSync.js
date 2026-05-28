@@ -1,10 +1,9 @@
 // ============================================================
-// hooks/useOfflineSync.js — Sync IndexedDB queue ke server
+// hooks/useOfflineSync.js — Sync IndexedDB queue ke Supabase
 // ============================================================
 import { useEffect, useCallback, useState } from 'react';
-import { absensiDB } from '../lib/localDB';
+import { absensiService } from '../lib/db/absensi';
 
-// Lazy import IndexedDB untuk cegah crash saat init
 async function safeGetPending() {
   try {
     const { getPending } = await import('../lib/indexedDB');
@@ -35,7 +34,7 @@ async function safeGetQueueCount() {
 
 export function useOfflineSync() {
   const [queueCount, setQueueCount] = useState(0);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline]     = useState(navigator.onLine);
 
   const syncQueue = useCallback(async () => {
     if (!navigator.onLine) return;
@@ -43,20 +42,26 @@ export function useOfflineSync() {
       const pending = await safeGetPending();
       if (pending.length === 0) return;
 
-      // Batch insert ke localStorage (pengganti Supabase)
-      const batches = [];
-      for (let i = 0; i < pending.length; i += 10) {
-        batches.push(pending.slice(i, i + 10));
-      }
+      // Sync ke Supabase dalam batch
       const syncedIds = [];
-      for (const batch of batches) {
-        absensiDB.bulkCreate(batch.map(b => ({
-          siswa_id: b.siswa_id, sesi_id: b.sesi_id,
-          tanggal: b.tanggal, waktu_scan: b.waktu_scan,
-          status: b.status || 'hadir', catatan: b.catatan || '',
-        })));
-        syncedIds.push(...batch.map(b => b.id));
+      for (const item of pending) {
+        try {
+          await absensiService.create({
+            siswa_id:   item.siswa_id,
+            sesi_id:    item.sesi_id,
+            tanggal:    item.tanggal,
+            waktu_scan: item.waktu_scan,
+            status:     item.status  || 'hadir',
+            catatan:    item.catatan || '',
+          });
+          syncedIds.push(item.id);
+        } catch (err) {
+          // Skip jika duplicate (unique constraint), masih mark as synced
+          if (err?.code === '23505') syncedIds.push(item.id);
+          else console.warn('Gagal sync item:', item.id, err);
+        }
       }
+
       await safeMarkSynced(syncedIds);
       const count = await safeGetQueueCount();
       setQueueCount(count);
@@ -66,19 +71,14 @@ export function useOfflineSync() {
   }, []);
 
   useEffect(() => {
-    const handleOnline = () => { setIsOnline(true); syncQueue(); };
+    const handleOnline  = () => { setIsOnline(true); syncQueue(); };
     const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
+    window.addEventListener('online',  handleOnline);
     window.addEventListener('offline', handleOffline);
-
-    // Sync setiap 30 detik
     const interval = setInterval(syncQueue, 30000);
-
-    // Init queue count
     safeGetQueueCount().then(setQueueCount).catch(() => {});
-
     return () => {
-      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('online',  handleOnline);
       window.removeEventListener('offline', handleOffline);
       clearInterval(interval);
     };

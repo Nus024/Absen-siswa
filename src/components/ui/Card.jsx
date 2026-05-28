@@ -6,6 +6,7 @@ export default function Card({
   padding = 'md',
   hoverable = false,
   className = '',
+  style = {},
 }) {
   return (
     <div
@@ -15,6 +16,7 @@ export default function Card({
         hoverable ? styles.hoverable : '',
         className,
       ].join(' ')}
+      style={style}
     >
       {children}
     </div>

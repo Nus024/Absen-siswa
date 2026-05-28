@@ -32,14 +32,14 @@
 .primary { background: var(--color-primary-500); color: var(--text-inverse); border-color: var(--color-primary-500); }
 .primary:hover:not(:disabled) { background: var(--color-primary-600); border-color: var(--color-primary-600); box-shadow: var(--shadow-sm); }
 
-.secondary { background: var(--color-primary-50); color: var(--color-primary-700); border-color: var(--color-primary-200); }
-.secondary:hover:not(:disabled) { background: var(--color-primary-100); border-color: var(--color-primary-300); }
+.secondary { background: var(--color-secondary-bg); color: var(--color-secondary-text); border-color: var(--color-secondary-border); }
+.secondary:hover:not(:disabled) { background: var(--color-secondary-bg-hover); border-color: var(--color-secondary-border-hover); }
 
 .ghost { background: transparent; color: var(--text-secondary); border-color: var(--border-default); }
 .ghost:hover:not(:disabled) { background: var(--color-neutral-100); color: var(--text-primary); }
 
-.danger { background: #fef2f2; color: var(--color-danger); border-color: #fecaca; }
-.danger:hover:not(:disabled) { background: #fee2e2; }
+.danger { background: var(--color-danger-bg); color: var(--color-danger-text); border-color: var(--color-danger-border); }
+.danger:hover:not(:disabled) { background: var(--color-danger-bg-hover); }
 
 /* Modifiers */
 .fullWidth { width: 100%; }

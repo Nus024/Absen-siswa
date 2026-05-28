@@ -36,7 +36,7 @@ export default function Table({
                   ))}
                 </tr>
               ))
-            ) : data.length === 0 ? (
+            ) : !Array.isArray(data) || data.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className={styles.empty}>
                   <div className={styles.emptyInner}>

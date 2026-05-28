@@ -81,7 +81,7 @@ export default function DatePicker({ value, onChange, style }) {
   })() : 'Pilih Tanggal';
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', display: 'inline-block', ...style }}>
+    <div ref={containerRef} style={{ position: 'relative', display: 'inline-block', minWidth: 140, ...style }}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -89,6 +89,7 @@ export default function DatePicker({ value, onChange, style }) {
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
+          width: '100%',
           height: '38px',
           padding: '0 12px',
           background: 'var(--bg-card)',
@@ -110,7 +111,7 @@ export default function DatePicker({ value, onChange, style }) {
         <div style={{
           position: 'absolute',
           top: 'calc(100% + 4px)',
-          left: 0,
+          right: 0,
           zIndex: 150,
           width: '280px',
           background: 'var(--bg-card)',

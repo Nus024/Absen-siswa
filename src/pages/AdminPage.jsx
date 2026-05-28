@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import QRCode from 'qrcode';
 import JSZip from 'jszip';
-import { siswaDB, kelasDB, sesiDB, usersDB } from '../lib/localDB';
+import { siswaDB, kelasDB, sesiDB, usersDB } from '../lib/db/index';
+
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../hooks/useTheme';
 import * as XLSX from 'xlsx';
 import { LogOut, Upload, Download, Users, BookOpen, Clock, UserCog, ChevronRight, ArrowLeft, Paintbrush, KeyRound, AlertTriangle, QrCode, Pencil, Trash2, Settings } from 'lucide-react';
 import Header from '../components/ui/Header';
@@ -17,16 +18,35 @@ import Badge from '../components/ui/Badge';
 // ── Modal QR (komponen terpisah agar canvas selalu ada di DOM) ──
 function QRModal({ siswa, onClose }) {
   const canvasRef = useRef(null);
+  const [loading, setLoading] = useState(true);
+  const [kelasNama, setKelasNama] = useState('—');
 
   useEffect(() => {
     if (!canvasRef.current) return;
-    // Payload deterministik: NIS::NAMA — tidak berubah selama NIS & NAMA sama
-    const payload = `${siswa.nis}::${siswa.nama}`;
-    QRCode.toCanvas(canvasRef.current, payload, {
-      width: 280,
-      margin: 2,
-      color: { dark: '#1a2e1a', light: '#ffffff' },
-    }).catch(console.error);
+    setLoading(true);
+    kelasDB.getById(siswa.kelas_id)
+      .then(kelas => {
+        const kNama = kelas?.nama || '—';
+        setKelasNama(kNama);
+        const payload = `${siswa.nis}::${siswa.nama}`;
+        import('../features/qr/ktsDraw').then(({ drawKtsCard }) => {
+          drawKtsCard(canvasRef.current, {
+            nis: siswa.nis,
+            nama: siswa.nama,
+            kelasNama: kNama,
+            qrToken: payload
+          }, () => {
+            setLoading(false);
+          });
+        }).catch((err) => {
+          console.error(err);
+          setLoading(false);
+        });
+      })
+      .catch((err) => {
+        console.error(err);
+        setLoading(false);
+      });
   }, [siswa]);
 
   function downloadQR() {
@@ -36,33 +56,47 @@ function QRModal({ siswa, onClose }) {
       const a = document.createElement('a');
       const safeName = siswa.nama.replace(/[^a-zA-Z0-9\u00C0-\u00FF ]/g, '').trim().replace(/\s+/g, '_');
       a.href = url;
-      a.download = `QR_${safeName}.png`;
+      a.download = `KTS_${safeName}.jpg`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    }, 'image/png');
+    }, 'image/jpeg', 0.95);
   }
-
-  const kelasNama = kelasDB.getById(siswa.kelas_id)?.nama || '—';
 
   return createPortal(
     <div className="modal-scrim" onClick={onClose}>
-      <div className="modal-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 380, textAlign: 'center' }}>
+      <div className="modal-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 520, width: '90%', textAlign: 'center' }}>
         <div className="modal-header">
-          <h3 className="modal-title">QR Code Siswa</h3>
+          <h3 className="modal-title">Kartu Tanda Siswa (KTS)</h3>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-divider" />
-        <div className="modal-body stack-4" style={{ alignItems: 'center', paddingTop: 24 }}>
+        <div className="modal-body stack-4" style={{ alignItems: 'center', paddingTop: 20 }}>
           <div style={{
-            background: 'white',
-            borderRadius: 16,
-            padding: 16,
-            boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
+            background: 'var(--bg-inset)',
+            borderRadius: 12,
+            padding: 8,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
             display: 'inline-block',
+            width: '100%',
+            overflow: 'hidden',
+            position: 'relative'
           }}>
-            <canvas ref={canvasRef} style={{ display: 'block', borderRadius: 8 }} />
+            {loading && (
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(255,255,255,0.7)',
+                zIndex: 10
+              }}>
+                <span className="spinner" />
+              </div>
+            )}
+            <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 'auto', borderRadius: 6 }} />
           </div>
           <div style={{ marginTop: 8 }}>
             <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>{siswa.nama}</div>
@@ -70,14 +104,11 @@ function QRModal({ siswa, onClose }) {
               NIS: {siswa.nis}&nbsp;|&nbsp;{kelasNama}
             </div>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-            Scan QR ini untuk absensi otomatis
-          </div>
         </div>
         <div className="modal-footer" style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
           <Button variant="ghost" onClick={onClose}>Tutup</Button>
-          <Button variant="primary" icon={<Download size={16} />} onClick={downloadQR}>
-            Unduh PNG
+          <Button variant="primary" icon={<Download size={16} />} onClick={downloadQR} disabled={loading}>
+            Unduh KTS
           </Button>
         </div>
       </div>
@@ -92,9 +123,9 @@ function ModalPortal({ children }) {
 }
 
 // ── AdminPage ──────────────────────────────────────────────────
-export function AdminPage({ user }) {
+export function AdminPage({ user, onLogout }) {
   const canAdmin = user?.role === 'admin';
-  const { logout } = useAuth();
+  const { theme, setTheme, themeColor, setThemeColor } = useTheme();
   const [activeView, setActiveView] = useState('menu');
   const [confirmData, setConfirmData] = useState(null);
 
@@ -154,139 +185,244 @@ export function AdminPage({ user }) {
   }
 
   return (
-    <div className="stack-6" style={{ maxWidth: 640, margin: '0 auto' }}>
+    <div className="stack-6" style={{ maxWidth: canAdmin ? 1024 : 640, margin: '0 auto' }}>
       <Header title="Pengaturan Sistem" subtitle="Kelola data dan konfigurasi aplikasi" />
 
-      {canAdmin && (
-        <Card padding="none" style={{ overflow: 'hidden' }}>
-          <div className="stack-0">
-            <MenuButton icon={<BookOpen size={20} color="var(--color-primary-600)" />} title="Data Kelas" subtitle="Kelola daftar kelas dan rombongan belajar" onClick={() => setActiveView('kelas')} />
-            <div style={{ height: 1, background: 'var(--border-subtle)', margin: '0 16px' }} />
-            <MenuButton icon={<Users size={20} color="var(--color-success)" />} title="Data Siswa" subtitle="Kelola data siswa dan import/export Excel" onClick={() => setActiveView('siswa')} />
-            <div style={{ height: 1, background: 'var(--border-subtle)', margin: '0 16px' }} />
-            <MenuButton icon={<Clock size={20} color="var(--color-warning)" />} title="Sesi Absensi" subtitle="Kelola sesi waktu absensi harian" onClick={() => setActiveView('sesi')} />
-            <div style={{ height: 1, background: 'var(--border-subtle)', margin: '0 16px' }} />
-            <MenuButton icon={<UserCog size={20} color="var(--color-info)" />} title="Manajemen Akun" subtitle="Kelola role admin dan akses pengawas" onClick={() => setActiveView('user')} />
-          </div>
-        </Card>
-      )}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: canAdmin ? 'repeat(auto-fit, minmax(320px, 1fr))' : '1fr',
+        gap: 'var(--space-6)',
+        alignItems: 'start'
+      }}>
+        {canAdmin && (
+          <div className="stack-6">
+            <Card padding="none" style={{ overflow: 'hidden' }}>
+              <div className="stack-0">
+                <MenuButton icon={<BookOpen size={20} color="var(--color-primary-600)" />} title="Data Kelas" subtitle="Kelola daftar kelas dan rombongan belajar" onClick={() => setActiveView('kelas')} />
+                <div style={{ height: 1, background: 'var(--border-subtle)', margin: '0 16px' }} />
+                <MenuButton icon={<Users size={20} color="var(--color-success)" />} title="Data Siswa" subtitle="Kelola data siswa dan import/export Excel" onClick={() => setActiveView('siswa')} />
+                <div style={{ height: 1, background: 'var(--border-subtle)', margin: '0 16px' }} />
+                <MenuButton icon={<Clock size={20} color="var(--color-warning)" />} title="Sesi Absensi" subtitle="Kelola sesi waktu absensi harian" onClick={() => setActiveView('sesi')} />
+                <div style={{ height: 1, background: 'var(--border-subtle)', margin: '0 16px' }} />
+                <MenuButton icon={<UserCog size={20} color="var(--color-info)" />} title="Manajemen Akun" subtitle="Kelola role admin dan akses pengawas" onClick={() => setActiveView('user')} />
+              </div>
+            </Card>
 
-      {canAdmin && (
-        <Card padding="md">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <div style={{ width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-inset)', borderRadius: 10, flexShrink: 0 }}>
-              <Settings size={20} color="var(--color-primary-600)" />
-            </div>
-            <div>
-              <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Identitas Sekolah & Aplikasi</h3>
-              <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>Kustomisasi nama dan logo sekolah pada sistem</p>
-            </div>
+            <Card padding="md">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <div style={{ width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-inset)', borderRadius: 10, flexShrink: 0 }}>
+                  <Settings size={20} color="var(--color-primary-600)" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Identitas Sekolah & Aplikasi</h3>
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>Kustomisasi nama dan logo sekolah pada sistem</p>
+                </div>
+              </div>
+              
+              <div className="stack-4">
+                <Input
+                  label="Nama Sekolah / Aplikasi"
+                  value={schoolName}
+                  onChange={e => handleNameChange(e.target.value)}
+                  placeholder="Contoh: Absensi QR"
+                />
+                
+                <div className="field">
+                  <label className="field-label">Logo Sekolah</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
+                    <div style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: 12,
+                      border: '1.5px solid var(--border-default)',
+                      background: 'var(--bg-inset)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      flexShrink: 0
+                    }}>
+                      {schoolLogo ? (
+                        <img src={schoolLogo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: 20, fontWeight: 'bold', color: 'var(--text-muted)' }}>
+                          {schoolName ? schoolName.charAt(0).toUpperCase() : 'A'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="stack-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="school-logo-input"
+                        style={{ display: 'none' }}
+                        onChange={handleLogoChange}
+                      />
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <Button size="sm" variant="secondary" onClick={() => document.getElementById('school-logo-input')?.click()}>
+                          Unggah Logo
+                        </Button>
+                        {schoolLogo && (
+                          <Button size="sm" variant="ghost" style={{ color: 'var(--color-danger)', borderColor: '#fecaca' }} onClick={handleRemoveLogo}>
+                            Hapus
+                          </Button>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Format JPG/PNG, maks. 1MB.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
           </div>
-          
-          <div className="stack-4">
-            <Input
-              label="Nama Sekolah / Aplikasi"
-              value={schoolName}
-              onChange={e => handleNameChange(e.target.value)}
-              placeholder="Contoh: Absensi QR"
-            />
-            
-            <div className="field">
-              <label className="field-label">Logo Sekolah</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
+        )}
+
+        <div className="stack-6">
+          <Card padding="md">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <div style={{ width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-inset)', borderRadius: 10, flexShrink: 0 }}>
+                <Paintbrush size={20} color="var(--color-primary-600)" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Kustomisasi Tampilan</h3>
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>Ubah warna brand dan mode terang/gelap sistem</p>
+              </div>
+            </div>
+
+            <div className="stack-4">
+              <div className="field">
+                <label className="field-label">Mode Tampilan</label>
                 <div style={{
-                  width: 56,
-                  height: 56,
+                  display: 'flex',
+                  background: 'var(--bg-inset)',
+                  padding: 4,
                   borderRadius: 12,
                   border: '1.5px solid var(--border-default)',
-                  background: 'var(--bg-inset)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  flexShrink: 0
+                  gap: 4,
+                  marginTop: 4
                 }}>
-                  {schoolLogo ? (
-                    <img src={schoolLogo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <span style={{ fontSize: 20, fontWeight: 'bold', color: 'var(--text-muted)' }}>
-                      {schoolName ? schoolName.charAt(0).toUpperCase() : 'A'}
-                    </span>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setTheme('light')}
+                    style={{
+                      flex: 1,
+                      border: 'none',
+                      borderRadius: 8,
+                      padding: '8px 16px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      backgroundColor: theme === 'light' ? 'var(--bg-card)' : 'transparent',
+                      color: theme === 'light' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      boxShadow: theme === 'light' ? 'var(--shadow-sm)' : 'none',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                  >
+                    TERANG
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTheme('dark')}
+                    style={{
+                      flex: 1,
+                      border: 'none',
+                      borderRadius: 8,
+                      padding: '8px 16px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      backgroundColor: theme === 'dark' ? 'var(--bg-card)' : 'transparent',
+                      color: theme === 'dark' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      boxShadow: theme === 'dark' ? 'var(--shadow-sm)' : 'none',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                  >
+                    GELAP
+                  </button>
                 </div>
-                <div className="stack-2">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    id="school-logo-input"
-                    style={{ display: 'none' }}
-                    onChange={handleLogoChange}
-                  />
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <Button size="sm" variant="secondary" onClick={() => document.getElementById('school-logo-input')?.click()}>
-                      Unggah Logo
-                    </Button>
-                    {schoolLogo && (
-                      <Button size="sm" variant="ghost" style={{ color: 'var(--color-danger)', borderColor: '#fecaca' }} onClick={handleRemoveLogo}>
-                        Hapus
-                      </Button>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Format JPG/PNG, maks. 1MB.</div>
+              </div>
+
+              <div className="field">
+                <label className="field-label">Warna Utama</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
+                  {[
+                    { id: 'green', label: 'Hijau', color: '#22c55e' },
+                    { id: 'blue', label: 'Biru', color: '#1591dc' },
+                    { id: 'deep-green', label: 'Hijau Tua', color: '#009933' },
+                    { id: 'lime', label: 'Lime', color: '#a3e635' },
+                    { id: 'purple', label: 'Ungu', color: '#a855f7' },
+                    { id: 'orange', label: 'Oranye', color: '#f97316' }
+                  ].map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setThemeColor(item.id)}
+                      title={item.label}
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: '50%',
+                        border: themeColor === item.id ? '3px solid var(--text-primary)' : '2px solid transparent',
+                        background: item.color,
+                        cursor: 'pointer',
+                        boxShadow: 'var(--shadow-sm)',
+                        outline: 'none',
+                        padding: 0,
+                        transition: 'transform var(--transition-fast), border-color var(--transition-fast)',
+                        position: 'relative',
+                        transform: themeColor === item.id ? 'scale(1.1)' : 'scale(1)'
+                      }}
+                      onMouseOver={e => e.currentTarget.style.transform = 'scale(1.15)'}
+                      onMouseOut={e => e.currentTarget.style.transform = themeColor === item.id ? 'scale(1.1)' : 'scale(1)'}
+                    />
+                  ))}
                 </div>
               </div>
             </div>
-          </div>
-        </Card>
-      )}
+          </Card>
 
-      <Card padding="none" style={{ overflow: 'hidden' }}>
-        <div className="stack-0">
-          <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-inset)', borderRadius: 10 }}>
-              <Paintbrush size={20} color="var(--color-neutral-600)" />
+          <Card padding="none" style={{ overflow: 'hidden' }}>
+            <div className="stack-0">
+              <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-inset)', borderRadius: 10 }}>
+                  <KeyRound size={20} color="var(--color-neutral-600)" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Informasi Akun</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{user.username} ({user.role})</div>
+                </div>
+              </div>
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Tampilan</div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Edu Green Light Theme (Aktif)</div>
-            </div>
-          </div>
-          <div style={{ height: 1, background: 'var(--border-subtle)', margin: '0 16px' }} />
-          <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-inset)', borderRadius: 10 }}>
-              <KeyRound size={20} color="var(--color-neutral-600)" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Informasi Akun</div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{user.username} ({user.role})</div>
-            </div>
-          </div>
+          </Card>
+
+          {canAdmin && (
+            <Card padding="md" style={{ border: '1px solid #fecaca', background: '#fef2f2' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <AlertTriangle color="var(--color-danger)" size={20} />
+                <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-danger)' }}>Danger Zone</h2>
+              </div>
+              <p style={{ fontSize: 13, color: '#991b1b', marginBottom: 16 }}>Tindakan ini akan menghapus semua data lokal di perangkat ini (Siswa, Kelas, Absensi, Sesi, Izin).</p>
+              <Button variant="danger" fullWidth onClick={() => {
+                setConfirmData({
+                  title: 'Reset Database',
+                  message: 'Yakin ingin mereset semua data? Tindakan ini akan menghapus semua data lokal di perangkat ini (Siswa, Kelas, Absensi, Sesi, Izin) dan tidak dapat dibatalkan.',
+                  onConfirm: () => {
+                    localStorage.clear();
+                    window.location.reload();
+                  }
+                });
+              }}>
+                Reset Database
+              </Button>
+            </Card>
+          )}
+
+          <Button variant="ghost" fullWidth icon={<LogOut size={16} />} onClick={onLogout} style={{ color: 'var(--color-danger)', background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+            Keluar dari Akun
+          </Button>
         </div>
-      </Card>
+      </div>
 
-      <Card padding="md" style={{ border: '1px solid #fecaca', background: '#fef2f2' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <AlertTriangle color="var(--color-danger)" size={20} />
-          <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-danger)' }}>Danger Zone</h2>
-        </div>
-        <p style={{ fontSize: 13, color: '#991b1b', marginBottom: 16 }}>Tindakan ini akan menghapus semua data lokal di perangkat ini (Siswa, Kelas, Absensi, Sesi, Izin).</p>
-        <Button variant="danger" fullWidth onClick={() => {
-          setConfirmData({
-            title: 'Reset Database',
-            message: 'Yakin ingin mereset semua data? Tindakan ini akan menghapus semua data lokal di perangkat ini (Siswa, Kelas, Absensi, Sesi, Izin) dan tidak dapat dibatalkan.',
-            onConfirm: () => {
-              localStorage.clear();
-              window.location.reload();
-            }
-          });
-        }}>
-          Reset Database
-        </Button>
-      </Card>
-
-      <Button variant="ghost" fullWidth icon={<LogOut size={16} />} onClick={logout} style={{ color: 'var(--color-danger)', background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-        Keluar dari Akun
-      </Button>
       <ConfirmDialog
         isOpen={!!confirmData}
         title={confirmData?.title}
@@ -333,9 +469,17 @@ function ManageSiswa({ canAdmin }) {
   const [bulkLoading, setBulkLoading] = useState(false);
   const fileInputRef = useRef(null);
 
-  function load() {
-    setList(siswaDB.getAll());
-    setKelasList(kelasDB.getAll());
+  async function load() {
+    try {
+      const [sData, kData] = await Promise.all([
+        siswaDB.getAll(),
+        kelasDB.getAll()
+      ]);
+      setList(sData || []);
+      setKelasList(kData || []);
+    } catch (e) {
+      console.error("Gagal load siswa/kelas:", e);
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -357,23 +501,35 @@ function ManageSiswa({ canAdmin }) {
     setModal(s);
   }
 
-  function save() {
+  async function save() {
     if (!form.nis.trim() || !form.nama.trim() || !form.kelas_id) { setErr('Semua field wajib diisi'); return; }
-    if (modal === 'new') {
-      if (list.find(s => s.nis === form.nis.trim())) { setErr('NIS sudah terdaftar'); return; }
-      siswaDB.create(form);
-    } else {
-      siswaDB.update(modal.id, form);
+    try {
+      if (modal === 'new') {
+        if (list.find(s => s.nis === form.nis.trim())) { setErr('NIS sudah terdaftar'); return; }
+        await siswaDB.create(form);
+      } else {
+        await siswaDB.update(modal.id, form);
+      }
+      await load();
+      setModal(null);
+    } catch (e) {
+      setErr(e.message || 'Gagal menyimpan data');
     }
-    load();
-    setModal(null);
   }
 
   function del(s) {
     setConfirmData({
       title: 'Hapus Siswa',
       message: `Hapus siswa "${s.nama}"?`,
-      onConfirm: () => { siswaDB.delete(s.id); load(); setConfirmData(null); },
+      onConfirm: async () => {
+        try {
+          await siswaDB.delete(s.id);
+          await load();
+        } catch (e) {
+          console.error("Gagal menghapus siswa:", e);
+        }
+        setConfirmData(null);
+      },
     });
   }
 
@@ -389,32 +545,40 @@ function ManageSiswa({ canAdmin }) {
     setBulkLoading(true);
     try {
       const zip = new JSZip();
+      const { drawKtsCard } = await import('../features/qr/ktsDraw');
+      const tempCanvas = document.createElement('canvas');
 
-      // Generate semua QR sebagai PNG blob secara paralel
-      await Promise.all(
-        filtered.map(async (siswa) => {
-          // Payload sama dengan single generate: NIS::NAMA
-          const dataURL = await QRCode.toDataURL(`${siswa.nis}::${siswa.nama}`, {
-            width: 300,
-            margin: 2,
-            color: { dark: '#1a2e1a', light: '#ffffff' },
+      const kelasListRaw = await kelasDB.getAll();
+      const kelasMap = new Map((kelasListRaw || []).map(k => [k.id, k.nama]));
+
+      for (const siswa of filtered) {
+        const kelasNama = kelasMap.get(siswa.kelas_id) || '—';
+        const payload = `${siswa.nis}::${siswa.nama}`;
+
+        await new Promise((resolve) => {
+          drawKtsCard(tempCanvas, {
+            nis: siswa.nis,
+            nama: siswa.nama,
+            kelasNama: kelasNama,
+            qrToken: payload
+          }, () => {
+            const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.90);
+            const base64 = dataUrl.split(',')[1];
+            const safeName = siswa.nama.replace(/[^a-zA-Z0-9\u00C0-\u00FF ]/g, '').trim().replace(/\s+/g, '_');
+            zip.file(`KTS_${safeName}.jpg`, base64, { base64: true });
+            resolve();
           });
-          // dataURL → base64 → tambah ke ZIP
-          const base64 = dataURL.split(',')[1];
-          const safeName = siswa.nama.replace(/[^a-zA-Z0-9\u00C0-\u00FF ]/g, '').trim().replace(/\s+/g, '_');
-          zip.file(`QR_${safeName}.png`, base64, { base64: true });
-        })
-      );
+        });
+      }
 
-      // Generate ZIP dan download
       const blob = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const label = kelasFilter
-        ? (kelasDB.getById(kelasFilter)?.nama || 'Kelas').replace(/\s+/g, '_')
+        ? (kelasMap.get(kelasFilter) || 'Kelas').replace(/\s+/g, '_')
         : 'Semua_Kelas';
       a.href = url;
-      a.download = `QR_Siswa_${label}.zip`;
+      a.download = `KTS_Siswa_${label}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -432,23 +596,28 @@ function ManageSiswa({ canAdmin }) {
     if (!file) return;
     if (!kelasFilter) { alert('Pilih kelas terlebih dahulu di filter sebelum import data!'); e.target.value = ''; return; }
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const wb = XLSX.read(evt.target.result, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws);
         let importedCount = 0;
-        data.forEach(row => {
+        const promises = [];
+        for (const row of data) {
           const nis = String(row.NIS || row.nis || '').trim();
           const nama = String(row.Nama || row.nama || '').trim();
           if (nis && nama && !list.find(s => s.nis === nis)) {
-            siswaDB.create({ nis, nama, kelas_id: kelasFilter });
+            promises.push(siswaDB.create({ nis, nama, kelas_id: kelasFilter }));
             importedCount++;
           }
-        });
+        }
+        await Promise.all(promises);
         alert(`Berhasil mengimport ${importedCount} siswa baru ke kelas ini.`);
-        load();
-      } catch { alert('Gagal membaca file Excel.'); }
+        await load();
+      } catch (err) {
+        console.error(err);
+        alert('Gagal membaca file Excel atau mengimport data.');
+      }
     };
     reader.readAsBinaryString(file);
     e.target.value = '';
@@ -458,15 +627,18 @@ function ManageSiswa({ canAdmin }) {
     { key: 'no',    label: '#',          width: '50px',  render: (_, __, i) => i + 1 },
     { key: 'nis',   label: 'NIS',        width: '110px' },
     { key: 'nama',  label: 'Nama Siswa' },
-    { key: 'kelas', label: 'Kelas',      render: (_, row) => <Badge variant="default">{kelasDB.getById(row.kelas_id)?.nama || '—'}</Badge> },
+    { key: 'kelas', label: 'Kelas',      render: (_, row) => {
+      const k = kelasList.find(c => c.id === row.kelas_id);
+      return <Badge variant="default">{k?.nama || '—'}</Badge>;
+    } },
     {
-      key: 'qr', label: 'QR Code', width: '120px', align: 'center',
+      key: 'qr', label: 'Kartu KTS', width: '120px', align: 'center',
       render: (_, row) => (
         <Button size="sm" variant="secondary"
           style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
           onClick={() => setQrSiswa(row)}
         >
-          <QrCode size={14} /> Generate
+          <QrCode size={14} /> Kartu KTS
         </Button>
       ),
     },
@@ -501,9 +673,9 @@ function ManageSiswa({ canAdmin }) {
             loading={bulkLoading}
             onClick={downloadSemuaQR}
             disabled={filtered.length === 0 || bulkLoading}
-            title={`Download ${filtered.length} QR siswa sebagai ZIP`}
+            title={`Download ${filtered.length} KTS siswa sebagai ZIP`}
           >
-            {bulkLoading ? `Generating ${filtered.length} QR…` : `Download QR (${filtered.length}) .zip`}
+            {bulkLoading ? `Generating ${filtered.length} KTS…` : `Download KTS (${filtered.length}) .zip`}
           </Button>
 
           {canAdmin && (
@@ -573,25 +745,45 @@ function ManageSiswa({ canAdmin }) {
   );
 }
 
-// ── Kelas ──────────────────────────────────────────────────────
 function ManageKelas({ canAdmin }) {
   const [list, setList] = useState([]);
+  const [siswaList, setSiswaList] = useState([]);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ nama: '' });
   const [err, setErr] = useState('');
   const [confirmData, setConfirmData] = useState(null);
 
-  function load() { setList(kelasDB.getAll()); }
+  async function load() {
+    try {
+      const [kData, sData] = await Promise.all([
+        kelasDB.getAll(),
+        siswaDB.getAll()
+      ]);
+      setList(kData || []);
+      setSiswaList(sData || []);
+    } catch (e) {
+      console.error("Gagal load kelas/siswa:", e);
+    }
+  }
   useEffect(() => { load(); }, []);
 
-  function save() {
+  async function save() {
     if (!form.nama.trim()) { setErr('Nama kelas wajib diisi'); return; }
-    if (modal === 'new') kelasDB.create(form); else kelasDB.update(modal.id, form);
-    load(); setModal(null);
+    try {
+      if (modal === 'new') {
+        await kelasDB.create(form.nama.trim());
+      } else {
+        await kelasDB.update(modal.id, form.nama.trim());
+      }
+      await load();
+      setModal(null);
+    } catch (e) {
+      setErr(e.message || 'Gagal menyimpan data');
+    }
   }
 
   function del(k) {
-    const cnt = siswaDB.getByKelas(k.id).length;
+    const cnt = siswaList.filter(s => s.kelas_id === k.id).length;
     if (cnt > 0) {
       setConfirmData({
         title: 'Tidak Bisa Menghapus',
@@ -600,13 +792,28 @@ function ManageKelas({ canAdmin }) {
       });
       return;
     }
-    setConfirmData({ title: 'Hapus Kelas', message: `Hapus kelas "${k.nama}"?`, onConfirm: () => { kelasDB.delete(k.id); load(); setConfirmData(null); } });
+    setConfirmData({
+      title: 'Hapus Kelas',
+      message: `Hapus kelas "${k.nama}"?`,
+      onConfirm: async () => {
+        try {
+          await kelasDB.delete(k.id);
+          await load();
+        } catch (e) {
+          console.error("Gagal menghapus kelas:", e);
+        }
+        setConfirmData(null);
+      }
+    });
   }
 
   const columns = [
     { key: 'no',     label: '#',            width: '50px',  render: (_, __, i) => i + 1 },
     { key: 'nama',   label: 'Nama Kelas' },
-    { key: 'jumlah', label: 'Jumlah Siswa',                 render: (_, row) => <Badge variant="default">{siswaDB.getByKelas(row.id).length} siswa</Badge> },
+    { key: 'jumlah', label: 'Jumlah Siswa',                 render: (_, row) => {
+      const cnt = siswaList.filter(s => s.kelas_id === row.id).length;
+      return <Badge variant="default">{cnt} siswa</Badge>;
+    } },
     ...(canAdmin ? [{
       key: 'aksi', label: 'Aksi', width: '100px', align: 'center',
       render: (_, row) => (
@@ -665,17 +872,41 @@ function ManageSesi({ canAdmin }) {
     setConfirmData({
       title: 'Hapus Sesi',
       message: `Hapus sesi "${s.nama}"? Tindakan ini tidak dapat dibatalkan.`,
-      onConfirm: () => { sesiDB.delete(s.id); load(); setConfirmData(null); },
+      onConfirm: async () => {
+        try {
+          await sesiDB.delete(s.id);
+          await load();
+        } catch (e) {
+          console.error("Gagal menghapus sesi:", e);
+        }
+        setConfirmData(null);
+      },
     });
   }
 
-  function load() { setList(sesiDB.getAll()); }
+  async function load() {
+    try {
+      const data = await sesiDB.getAll();
+      setList(data || []);
+    } catch (e) {
+      console.error("Gagal load sesi:", e);
+    }
+  }
   useEffect(() => { load(); }, []);
 
-  function save() {
+  async function save() {
     if (!form.nama.trim()) { setErr('Nama sesi wajib diisi'); return; }
-    if (modal === 'new') sesiDB.create(form); else sesiDB.update(modal.id, form);
-    load(); setModal(null);
+    try {
+      if (modal === 'new') {
+        await sesiDB.create(form);
+      } else {
+        await sesiDB.update(modal.id, form);
+      }
+      await load();
+      setModal(null);
+    } catch (e) {
+      setErr(e.message || 'Gagal menyimpan data');
+    }
   }
 
   const columns = [
@@ -750,7 +981,14 @@ function ManageUser({ canAdmin }) {
   const [showCfPw, setShowCfPw] = useState(false);    // toggle confirm pw
   const [confirmData, setConfirmData] = useState(null);
 
-  function load() { setList(usersDB.getAll()); }
+  async function load() {
+    try {
+      const data = await usersDB.getAll();
+      setList(data || []);
+    } catch (e) {
+      console.error("Gagal load users:", e);
+    }
+  }
   useEffect(() => { load(); }, []);
 
   function openNew() {
@@ -758,7 +996,7 @@ function ManageUser({ canAdmin }) {
     setErr(''); setShowPw(false); setModal('new');
   }
   function openEdit(u) {
-    setForm({ nama: u.nama, username: u.username, password: u.password, role: u.role, tingkat_akses: u.tingkat_akses || [] });
+    setForm({ nama: u.nama, username: u.username, password: '', role: u.role, tingkat_akses: u.tingkat_akses || [] });
     setErr(''); setShowPw(false); setModal(u);
   }
   function openPwModal(u) {
@@ -767,29 +1005,48 @@ function ManageUser({ canAdmin }) {
     setPwModal(u);
   }
 
-  function save() {
-    if (!form.nama.trim() || !form.username.trim() || !form.password.trim()) { setErr('Nama, Username, dan Password wajib diisi'); return; }
-    if (modal === 'new') {
-      if (list.find(u => u.username === form.username.trim())) { setErr('Username sudah digunakan'); return; }
-      usersDB.create(form);
-    } else {
-      usersDB.update(modal.id, form);
+  async function save() {
+    if (!form.nama.trim() || !form.username.trim()) { setErr('Nama dan Username wajib diisi'); return; }
+    if (modal === 'new' && !form.password.trim()) { setErr('Password wajib diisi'); return; }
+    try {
+      if (modal === 'new') {
+        if (list.find(u => u.username === form.username.trim())) { setErr('Username sudah digunakan'); return; }
+        await usersDB.create(form);
+      } else {
+        await usersDB.update(modal.id, form);
+      }
+      await load();
+      setModal(null);
+    } catch (e) {
+      setErr(e.message || 'Gagal menyimpan data');
     }
-    load(); setModal(null);
   }
 
-  function savePassword() {
+  async function savePassword() {
     if (!pwForm.password.trim()) { setPwErr('Password baru tidak boleh kosong'); return; }
     if (pwForm.password !== pwForm.confirm) { setPwErr('Konfirmasi password tidak cocok'); return; }
-    usersDB.update(pwModal.id, { password: pwForm.password });
-    load(); setPwModal(null);
+    try {
+      await usersDB.update(pwModal.id, { password: pwForm.password });
+      await load();
+      setPwModal(null);
+    } catch (e) {
+      setPwErr(e.message || 'Gagal mengubah password');
+    }
   }
 
   function delUser(u) {
     setConfirmData({
       title: 'Hapus Akun',
       message: `Hapus akun "${u.username}"? Tindakan ini tidak dapat dibatalkan.`,
-      onConfirm: () => { usersDB.delete(u.id); load(); setConfirmData(null); },
+      onConfirm: async () => {
+        try {
+          await usersDB.delete(u.id);
+          await load();
+        } catch (e) {
+          console.error("Gagal menghapus user:", e);
+        }
+        setConfirmData(null);
+      },
     });
   }
 
@@ -888,20 +1145,22 @@ function ManageUser({ canAdmin }) {
                   onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
                   disabled={modal !== 'new' && form.username === 'admin'}
                 />
-                {/* Password dengan show/hide */}
-                <div className="field">
-                  <label className="field-label">Password</label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      className="field-input"
-                      type={showPw ? 'text' : 'password'}
-                      value={form.password}
-                      onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                      style={{ paddingRight: 38 }}
-                    />
-                    <EyeBtn show={showPw} onToggle={() => setShowPw(v => !v)} />
+                {/* Password dengan show/hide (hanya saat tambah akun) */}
+                {modal === 'new' && (
+                  <div className="field">
+                    <label className="field-label">Password</label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        className="field-input"
+                        type={showPw ? 'text' : 'password'}
+                        value={form.password}
+                        onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                        style={{ paddingRight: 38 }}
+                      />
+                      <EyeBtn show={showPw} onToggle={() => setShowPw(v => !v)} />
+                    </div>
                   </div>
-                </div>
+                )}
                 {/* Role */}
                 <div className="field">
                   <label className="field-label">Role</label>

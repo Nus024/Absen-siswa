@@ -1,18 +1,24 @@
+// ============================================================
+// pages/RekapHarianPage.jsx — Rekap harian via Supabase + Realtime
+// ============================================================
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { absensiDB, siswaDB, kelasDB, sesiDB } from '../lib/localDB';
+import { kelasService }   from '../lib/db/kelas';
+import { siswaService }   from '../lib/db/siswa';
+import { sesiService }    from '../lib/db/sesi';
+import { absensiService } from '../lib/db/absensi';
+import { useRealtime }    from '../hooks/useRealtime';
 import { STATUS_ABSENSI, todayStr, formatTanggal, DAYS_ID } from '../lib/constants';
 import { exportRekapHarian } from '../features/reports/exportToExcel';
 import { Download, Printer, Search } from 'lucide-react';
-import Header from '../components/ui/Header';
-import Card from '../components/ui/Card';
-import Table from '../components/ui/Table';
-import Button from '../components/ui/Button';
-import Input from '../components/ui/Input';
-import Badge from '../components/ui/Badge';
-import StatCard from '../components/ui/StatCard';
-import Select from '../components/ui/Select';
+import Header    from '../components/ui/Header';
+import Table     from '../components/ui/Table';
+import Button    from '../components/ui/Button';
+import Input     from '../components/ui/Input';
+import Badge     from '../components/ui/Badge';
+import StatCard  from '../components/ui/StatCard';
+import Select    from '../components/ui/Select';
 import DatePicker from '../components/ui/DatePicker';
 
 const STATUS_CONFIG = {
@@ -25,55 +31,41 @@ const STATUS_CONFIG = {
 
 function StatusPopover({ cellRef, current, onSelect, onClose }) {
   const popRef = useRef(null);
-  const [pos, setPos] = useState({ top: 0, left: 0, above: false });
+  const [pos, setPos] = useState({ top: 0, left: 0 });
 
   useEffect(() => {
     if (!cellRef?.current) return;
     const rect = cellRef.current.getBoundingClientRect();
-    const popH = 52;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const above = spaceBelow < popH + 12;
-
     setPos({
-      top: above ? rect.top + window.scrollY - popH - 6 : rect.bottom + window.scrollY + 6,
-      left: Math.min(rect.left + window.scrollX + rect.width / 2 - 40, window.innerWidth - 120),
-      above,
+      top:  rect.bottom + window.scrollY + 6,
+      left: Math.min(rect.left + window.scrollX, window.innerWidth - 120),
     });
   }, [cellRef]);
 
   useEffect(() => {
     function handler(e) {
-      if (popRef.current && !popRef.current.contains(e.target) && cellRef.current && !cellRef.current.contains(e.target)) {
-        onClose();
-      }
+      if (popRef.current && !popRef.current.contains(e.target) &&
+          cellRef.current && !cellRef.current.contains(e.target)) onClose();
     }
     const t = setTimeout(() => document.addEventListener('mousedown', handler), 80);
     return () => { clearTimeout(t); document.removeEventListener('mousedown', handler); };
   }, [onClose, cellRef]);
 
   return (
-    <div
-      ref={popRef}
-      style={{
-        position: 'absolute', top: pos.top, left: pos.left,
-        background: 'var(--bg-card)', border: '1px solid var(--border-default)',
-        borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)',
-        padding: 'var(--space-2)', display: 'flex', gap: 'var(--space-1)', zIndex: 100
-      }}
-    >
+    <div ref={popRef} style={{
+      position: 'absolute', top: pos.top, left: pos.left,
+      background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+      borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)',
+      padding: 'var(--space-2)', display: 'flex', gap: 'var(--space-1)', zIndex: 100
+    }}>
       {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
-        <button
-          key={key}
-          onClick={() => { onSelect(key); onClose(); }}
+        <button key={key} onClick={() => { onSelect(key); onClose(); }}
           style={{
             border: 'none', background: current === key ? 'var(--color-neutral-100)' : 'transparent',
             padding: '4px 8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
             fontSize: 'var(--text-xs)', fontWeight: 'bold'
           }}
-          title={cfg.label}
-        >
-          {cfg.code}
-        </button>
+          title={cfg.label}>{cfg.code}</button>
       ))}
     </div>
   );
@@ -87,49 +79,77 @@ function AttendanceCell({ siswa, sesi, record, canEdit, onUpdate }) {
 
   return (
     <div ref={cellRef} style={{ display: 'inline-block' }}>
-      <button
-        style={{ background: 'transparent', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: 0 }}
-        onClick={canEdit ? () => setOpen(v => !v) : undefined}
-        title={cfg.label}
-      >
+      <button style={{ background: 'transparent', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: 0 }}
+        onClick={canEdit ? () => setOpen(v => !v) : undefined} title={cfg.label}>
         <Badge variant={cfg.variant}>{cfg.code}</Badge>
       </button>
-
       {open && canEdit && (
-        <StatusPopover cellRef={cellRef} current={status} onSelect={(newStatus) => onUpdate(siswa, sesi, record, newStatus)} onClose={() => setOpen(false)} />
+        <StatusPopover cellRef={cellRef} current={status}
+          onSelect={(newStatus) => onUpdate(siswa, sesi, record, newStatus)}
+          onClose={() => setOpen(false)} />
       )}
     </div>
   );
 }
 
 export function RekapHarianPage({ user }) {
-  const [tanggal, setTanggal] = useState(todayStr());
-  const [kelasId, setKelasId] = useState('');
+  const [tanggal, setTanggal]     = useState(todayStr());
+  const [kelasId, setKelasId]     = useState('');
   const [kelasList, setKelasList] = useState([]);
-  const [sesis, setSesis] = useState([]);
+  const [sesis, setSesis]         = useState([]);
+  const [siswas, setSiswas]       = useState([]);
   const [absensiData, setAbsensiData] = useState([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch]       = useState('');
+  const [loading, setLoading]     = useState(false);
 
-  const canEdit = ['admin', 'wali_kelas'].includes(user?.role);
+  const canEdit = ['admin', 'tu', 'wali_kelas'].includes(user?.role);
 
+  // Load kelas & sesi awal
   useEffect(() => {
-    let allKelas = kelasDB.getAll();
-    if (user?.role === 'pengawas' && user?.tingkat_akses?.length > 0) {
-      allKelas = allKelas.filter(k => user.tingkat_akses.includes(k.nama.split(' ')[0]));
+    async function init() {
+      try {
+        const [allKelas, allSesi] = await Promise.all([
+          kelasService.getAll(),
+          sesiService.getAll(),
+        ]);
+        let kelas = allKelas;
+        if (user?.role === 'pengawas' && user?.tingkat_akses?.length > 0) {
+          kelas = allKelas.filter(k => user.tingkat_akses.includes(k.nama.split(' ')[0]));
+        }
+        setKelasList(kelas);
+        setSesis(allSesi);
+        if (kelas.length > 0) setKelasId(kelas[0].id);
+      } catch (err) {
+        console.error('Gagal load awal:', err);
+      }
     }
-    setKelasList(allKelas);
-    setSesis(sesiDB.getAll().sort((a, b) => a.urutan - b.urutan));
+    init();
   }, [user]);
 
-  useEffect(() => { if (kelasList.length > 0 && !kelasId) setKelasId(kelasList[0].id); }, [kelasList]);
-  useEffect(() => { if (kelasId) loadData(); }, [tanggal, kelasId]);
-
-  function loadData() { setAbsensiData(absensiDB.getByTanggalKelas(tanggal, kelasId)); }
-
-  const siswas = useMemo(() => {
-    if (!kelasId) return [];
-    return siswaDB.getByKelas(kelasId);
+  // Load siswa saat kelas berubah
+  useEffect(() => {
+    if (!kelasId) return;
+    siswaService.getByKelas(kelasId).then(setSiswas).catch(console.error);
   }, [kelasId]);
+
+  // Load absensi
+  const loadAbsensi = useCallback(async () => {
+    if (!kelasId) return;
+    setLoading(true);
+    try {
+      const data = await absensiService.getByTanggalKelas(tanggal, kelasId);
+      setAbsensiData(data);
+    } catch (err) {
+      console.error('Gagal load absensi:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [tanggal, kelasId]);
+
+  useEffect(() => { loadAbsensi(); }, [loadAbsensi]);
+
+  // Realtime: reload saat ada absensi baru
+  useRealtime('absensi', () => loadAbsensi());
 
   const filtered = useMemo(() => {
     if (!search) return siswas;
@@ -155,117 +175,90 @@ export function RekapHarianPage({ user }) {
     return { ...s, total: siswas.length };
   }, [siswas, sesis, absensiMap]);
 
-  const handleUpdate = useCallback((siswa, sesi, existing, newStatus) => {
-    if (existing) {
-      absensiDB.update(existing.id, { status: newStatus, updated_by: user?.id });
-    } else {
-      absensiDB.create({ siswa_id: siswa.id, sesi_id: sesi.id, tanggal, status: newStatus, catatan: '' });
+  const handleUpdate = useCallback(async (siswa, sesi, existing, newStatus) => {
+    try {
+      await absensiService.upsert({
+        siswa_id: siswa.id,
+        sesi_id:  sesi.id,
+        tanggal,
+        status:   newStatus,
+        catatan:  existing?.catatan || '',
+      });
+      await loadAbsensi();
+    } catch (err) {
+      alert('Gagal update: ' + (err?.message || 'Error'));
     }
-    setAbsensiData(absensiDB.getByTanggalKelas(tanggal, kelasId));
-  }, [tanggal, kelasId, user]);
+  }, [tanggal, loadAbsensi]);
 
   const hariStr = `${DAYS_ID[new Date(tanggal + 'T00:00:00').getDay()]}, ${formatTanggal(tanggal + 'T00:00:00')}`;
-  const kelas = kelasDB.getById(kelasId);
+  const kelas = kelasList.find(k => k.id === kelasId);
 
   const columns = [
     { key: 'index', label: '#', width: '50px', render: (_, __, i) => i + 1 },
-    { key: 'nis', label: 'NIS', width: '100px' },
-    { key: 'nama', label: 'Nama Siswa' },
+    { key: 'nis',   label: 'NIS',  width: '100px' },
+    { key: 'nama',  label: 'Nama Siswa' },
     ...sesis.map(s => ({
-      key: `sesi_${s.id}`,
-      label: s.nama,
-      align: 'center',
+      key:    `sesi_${s.id}`,
+      label:  s.nama,
+      align:  'center',
       render: (_, row) => (
-        <AttendanceCell siswa={row} sesi={s} record={absensiMap[`${row.id}_${s.id}`]} canEdit={canEdit} onUpdate={handleUpdate} />
+        <AttendanceCell siswa={row} sesi={s} record={absensiMap[`${row.id}_${s.id}`]}
+          canEdit={canEdit} onUpdate={handleUpdate} />
       )
     }))
   ];
 
   return (
     <div className="stack-6">
-      <Header
-        title="Rekap Absensi Harian"
-        subtitle={hariStr}
-        actions={
-          <div className="row-3">
-            <Button size="sm" variant="ghost" onClick={() => window.print()} icon={<Printer size={16} />}>Cetak</Button>
-            <Button size="sm" onClick={() => exportRekapHarian({ siswas, absensiByDate: {}, sesis, tanggal, namaKelas: kelas?.nama })} icon={<Download size={16} />}>Excel</Button>
-          </div>
-        }
-      />
-
-      <div style={{
-        display: 'inline-flex',
-        background: 'var(--color-neutral-100)',
-        padding: '3px',
-        borderRadius: '8px',
-        alignSelf: 'flex-start',
-      }}>
-        <Link to="/rekap-harian" style={{
-          padding: '6px 14px',
-          borderRadius: '6px',
-          fontSize: '11px',
-          fontWeight: '600',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          textDecoration: 'none',
-          background: 'var(--bg-card)',
-          color: 'var(--color-primary-600)',
-          boxShadow: 'var(--shadow-xs)',
-          transition: 'all 150ms'
-        }}>Harian</Link>
-        <Link to="/rekap-bulanan" style={{
-          padding: '6px 14px',
-          borderRadius: '6px',
-          fontSize: '11px',
-          fontWeight: '600',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          textDecoration: 'none',
-          background: 'transparent',
-          color: 'var(--text-secondary)',
-          transition: 'all 150ms'
-        }}>Bulanan</Link>
+      <div className="desktop-header-wrap">
+        <Header title="Rekap Absensi Harian" subtitle={hariStr}
+          actions={
+            <div className="row-3">
+              <Button size="sm" variant="ghost" onClick={() => window.print()} icon={<Printer size={16} />}>Cetak</Button>
+              <Button size="sm" onClick={() => exportRekapHarian({ siswas, absensiByDate: {}, sesis, tanggal, namaKelas: kelas?.nama })} icon={<Download size={16} />}>Excel</Button>
+            </div>
+          }
+        />
       </div>
 
-      {/* Toolbar */}
-      <div style={{
-        background: 'var(--color-neutral-50)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: '12px',
-        padding: '12px 16px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        flexWrap: 'wrap',
-      }}>
-        <Select
-          value={kelasId}
-          onChange={setKelasId}
-          options={kelasList.map(k => ({ value: k.id, label: k.nama }))}
-        />
-        <DatePicker
-          value={tanggal}
-          onChange={setTanggal}
-        />
+      <div className="mobile-header-controls">
+        <div className="mobile-segmented-pill">
+          <Link to="/rekap-harian" className="active">HARIAN</Link>
+          <Link to="/rekap-bulanan" className="inactive">BULANAN</Link>
+        </div>
+        <div className="mobile-action-buttons">
+          <Button size="sm" variant="ghost" onClick={() => window.print()} icon={<Printer size={16} />}>Cetak</Button>
+          <Button size="sm" onClick={() => exportRekapHarian({ siswas, absensiByDate: {}, sesis, tanggal, namaKelas: kelas?.nama })} icon={<Download size={16} />}>Excel</Button>
+        </div>
+      </div>
+
+      <div className="desktop-segmented-wrap" style={{ display: 'inline-flex', background: 'var(--color-neutral-100)', padding: '3px', borderRadius: '8px', alignSelf: 'flex-start' }}>
+        <Link to="/rekap-harian" style={{ padding: '6px 14px', borderRadius: '6px', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textDecoration: 'none', background: 'var(--bg-card)', color: 'var(--color-primary-600)', boxShadow: 'var(--shadow-xs)' }}>Harian</Link>
+        <Link to="/rekap-bulanan" style={{ padding: '6px 14px', borderRadius: '6px', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textDecoration: 'none', background: 'transparent', color: 'var(--text-secondary)' }}>Bulanan</Link>
+      </div>
+
+      <div className="toolbar">
+        <Select value={kelasId} onChange={setKelasId} options={kelasList.map(k => ({ value: k.id, label: k.nama }))} />
+        <DatePicker value={tanggal} onChange={setTanggal} />
         <div style={{ flex: 1, minWidth: 200 }}>
           <Input icon={<Search size={16} />} placeholder="Cari nama atau NIS…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       </div>
 
       <div className="grid-stats">
-        <StatCard label="Hadir" value={summary.H} color="green" icon={<span style={{fontWeight:'bold'}}>H</span>} />
-        <StatCard label="Izin" value={summary.I} color="blue" icon={<span style={{fontWeight:'bold'}}>I</span>} />
-        <StatCard label="Sakit" value={summary.S} color="amber" icon={<span style={{fontWeight:'bold'}}>S</span>} />
-        <StatCard label="Alpha" value={summary.A} color="red" icon={<span style={{fontWeight:'bold'}}>A</span>} />
+        <StatCard label="Hadir" value={summary.H} color="green" icon={<span style={{ fontWeight: 'bold' }}>H</span>} />
+        <StatCard label="Izin"  value={summary.I} color="blue"  icon={<span style={{ fontWeight: 'bold' }}>I</span>} />
+        <StatCard label="Sakit" value={summary.S} color="amber" icon={<span style={{ fontWeight: 'bold' }}>S</span>} />
+        <StatCard label="Alpha" value={summary.A} color="red"   icon={<span style={{ fontWeight: 'bold' }}>A</span>} />
       </div>
 
-      <Table
-        columns={columns}
-        data={filtered}
-        keyExtractor={row => row.id}
-        emptyMessage="Pilih kelas atau tidak ada siswa"
-      />
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)' }}>
+          <span className="spinner" /> Memuat data…
+        </div>
+      ) : (
+        <Table columns={columns} data={filtered} keyExtractor={row => row.id} emptyMessage="Pilih kelas atau tidak ada siswa" />
+      )}
 
       {createPortal(
         <div className="print-container">
@@ -278,49 +271,43 @@ export function RekapHarianPage({ user }) {
               <span>{hariStr}</span>
             </div>
           </div>
-          
           <table className="print-table">
             <thead>
               <tr>
-                <th className="center" style={{ width: '40px', textAlign: 'center' }}>NO</th>
+                <th style={{ width: '40px', textAlign: 'center' }}>NO</th>
                 <th style={{ width: '120px' }}>NIS</th>
                 <th>NAMA SISWA</th>
-                <th className="center" style={{ width: '60px', textAlign: 'center' }}>H</th>
-                <th className="center" style={{ width: '60px', textAlign: 'center' }}>I</th>
-                <th className="center" style={{ width: '60px', textAlign: 'center' }}>S</th>
-                <th className="center" style={{ width: '60px', textAlign: 'center' }}>A</th>
+                <th style={{ width: '60px', textAlign: 'center' }}>H</th>
+                <th style={{ width: '60px', textAlign: 'center' }}>I</th>
+                <th style={{ width: '60px', textAlign: 'center' }}>S</th>
+                <th style={{ width: '60px', textAlign: 'center' }}>A</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="center" style={{ textAlign: 'center' }}>Tidak ada data</td>
-                </tr>
-              ) : (
-                filtered.map((sw, idx) => {
-                  let H = 0, I = 0, S = 0, A = 0;
-                  sesis.forEach(se => {
-                    const rec = absensiMap[`${sw.id}_${se.id}`];
-                    const st = rec?.status;
-                    if (st === 'hadir') H++;
-                    else if (st === 'izin') I++;
-                    else if (st === 'sakit') S++;
-                    else if (st === 'dispensasi') H++; // dispensasi counts as Hadir
-                    else A++; // default/alpha
-                  });
-                  return (
-                    <tr key={sw.id}>
-                      <td className="center" style={{ textAlign: 'center' }}>{idx + 1}</td>
-                      <td>{sw.nis}</td>
-                      <td>{sw.nama}</td>
-                      <td className="center" style={{ textAlign: 'center' }}>{H}</td>
-                      <td className="center" style={{ textAlign: 'center' }}>{I}</td>
-                      <td className="center" style={{ textAlign: 'center' }}>{S}</td>
-                      <td className="center" style={{ textAlign: 'center' }}>{A}</td>
-                    </tr>
-                  );
-                })
-              )}
+                <tr><td colSpan={7} style={{ textAlign: 'center' }}>Tidak ada data</td></tr>
+              ) : filtered.map((sw, idx) => {
+                let H = 0, I = 0, S = 0, A = 0;
+                sesis.forEach(se => {
+                  const rec = absensiMap[`${sw.id}_${se.id}`];
+                  if (!rec) { A++; return; }
+                  if (rec.status === 'hadir' || rec.status === 'dispensasi') H++;
+                  else if (rec.status === 'izin') I++;
+                  else if (rec.status === 'sakit') S++;
+                  else A++;
+                });
+                return (
+                  <tr key={sw.id}>
+                    <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                    <td>{sw.nis}</td>
+                    <td>{sw.nama}</td>
+                    <td style={{ textAlign: 'center' }}>{H}</td>
+                    <td style={{ textAlign: 'center' }}>{I}</td>
+                    <td style={{ textAlign: 'center' }}>{S}</td>
+                    <td style={{ textAlign: 'center' }}>{A}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>,
