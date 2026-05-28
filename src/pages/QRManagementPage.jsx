@@ -4,6 +4,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { siswaDB, kelasDB } from '../lib/localDB';
 import { generateQRDataUrl, generateQRBatch } from '../features/qr/QRGenerator';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 export function QRManagementPage({ user }) {
   const [kelasList, setKelasList]     = useState([]);
@@ -13,6 +14,7 @@ export function QRManagementPage({ user }) {
   const [previewSiswa, setPreviewSiswa] = useState(null);
   const [previewQr, setPreviewQr]     = useState('');
   const [loadingPrint, setLoadingPrint] = useState(false);
+  const [confirmData, setConfirmData] = useState(null);
   const canAdmin = user?.role === 'admin';
 
   useEffect(() => {
@@ -109,9 +111,15 @@ export function QRManagementPage({ user }) {
   }
 
   function handleRegenerate(siswa) {
-    if (!window.confirm(`Reset QR ${siswa.nama}?\nQR lama akan tidak berlaku.`)) return;
-    siswaDB.regenerateQr(siswa.id);
-    setSiswas(siswaDB.getByKelas(kelasId));
+    setConfirmData({
+      title: 'Reset QR Code',
+      message: `Reset QR untuk ${siswa.nama}? QR lama tidak akan berlaku lagi.`,
+      onConfirm: () => {
+        siswaDB.regenerateQr(siswa.id);
+        setSiswas(siswaDB.getByKelas(kelasId));
+        setConfirmData(null);
+      }
+    });
   }
 
   return (
@@ -119,7 +127,6 @@ export function QRManagementPage({ user }) {
       <div className="page-header">
         <div className="page-header-left">
           <h1 className="page-title">Manajemen QR</h1>
-          <span className="page-subtitle">Generate & cetak kartu QR siswa</span>
         </div>
         <div className="page-header-actions">
           <button
@@ -287,6 +294,14 @@ export function QRManagementPage({ user }) {
           </div>
         </div>
       )}
+
+      <ConfirmDialog 
+        isOpen={!!confirmData}
+        title={confirmData?.title}
+        message={confirmData?.message}
+        onConfirm={confirmData?.onConfirm}
+        onCancel={() => setConfirmData(null)}
+      />
     </div>
   );
 }

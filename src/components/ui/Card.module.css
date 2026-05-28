@@ -1,0 +1,24 @@
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xs);
+}
+
+.pad-sm  { padding: var(--space-4); }
+.pad-md  { padding: var(--space-6); }
+.pad-lg  { padding: var(--space-8); }
+
+.hoverable {
+  cursor: pointer;
+  transition: box-shadow var(--transition-base), transform var(--transition-base);
+}
+.hoverable:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+@media (max-width: 640px) {
+  .pad-lg { padding: var(--space-5); }
+  .pad-md { padding: var(--space-4); }
+}

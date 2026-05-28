@@ -1,13 +1,15 @@
-// ============================================================
-// pages/RekapBulananPage.jsx — Rekap absensi bulanan
-// Tabel: Nama | Tgl-1 ... Tgl-31 | H | I | S | A | D
-// ============================================================
 import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { absensiDB, siswaDB, kelasDB, sesiDB } from '../lib/localDB';
 import { STATUS_ABSENSI, MONTHS_ID } from '../lib/constants';
 import { exportRekapBulanan } from '../features/reports/exportToExcel';
+import { Download, Printer } from 'lucide-react';
+import Header from '../components/ui/Header';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import Badge from '../components/ui/Badge';
 
-export function RekapBulananPage() {
+export function RekapBulananPage({ user }) {
   const now = new Date();
   const [bulan, setBulan] = useState(now.getMonth() + 1);
   const [tahun, setTahun] = useState(now.getFullYear());
@@ -17,9 +19,13 @@ export function RekapBulananPage() {
   const [absensiData, setAbsensiData] = useState([]);
 
   useEffect(() => {
-    setKelasList(kelasDB.getAll());
+    let allKelas = kelasDB.getAll();
+    if (user?.role === 'pengawas' && user?.tingkat_akses?.length > 0) {
+      allKelas = allKelas.filter(k => user.tingkat_akses.includes(k.nama.split(' ')[0]));
+    }
+    setKelasList(allKelas);
     setSesis(sesiDB.getAll());
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (kelasList.length > 0 && !kelasId) setKelasId(kelasList[0].id);
@@ -40,7 +46,6 @@ export function RekapBulananPage() {
   const daysInMonth = new Date(tahun, bulan, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-  // Map: siswa_id_tanggal → status (ambil sesi pertama)
   const absensiMap = useMemo(() => {
     const map = {};
     absensiData.forEach(a => {
@@ -69,114 +74,85 @@ export function RekapBulananPage() {
     return { H, I, S, A, D };
   }
 
-  function handleExport() {
-    const kelas = kelasDB.getById(kelasId);
-    exportRekapBulanan({ siswas, absensiMap, sesis, bulan, tahun, namaKelas: kelas?.nama });
-  }
-
   const tahunOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
+  const kelas = kelasDB.getById(kelasId);
 
   return (
-    <div>
-      <div className="page-header no-print">
-        <h1>Rekap Bulanan</h1>
-        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-          {MONTHS_ID[bulan - 1]} {tahun}
-        </span>
+    <div className="stack-6">
+      <Header
+        title="Rekap Absensi Bulanan"
+        subtitle={`${MONTHS_ID[bulan - 1]} ${tahun}`}
+        actions={
+          <div className="row-3">
+            <Button size="sm" variant="ghost" onClick={() => window.print()} icon={<Printer size={16} />}>Cetak</Button>
+            <Button size="sm" onClick={() => exportRekapBulanan({ siswas, absensiMap, sesis, bulan, tahun, namaKelas: kelas?.nama })} icon={<Download size={16} />}>Excel</Button>
+          </div>
+        }
+      />
+
+      <div className="row-3" style={{ borderBottom: '1px solid var(--border-default)', paddingBottom: 8 }}>
+        <Link to="/rekap-harian" style={{ color: 'var(--text-secondary)', textDecoration: 'none', paddingBottom: 8 }}>Harian</Link>
+        <Link to="/rekap-bulanan" style={{ fontWeight: 'bold', color: 'var(--color-primary-600)', textDecoration: 'none', borderBottom: '2px solid var(--color-primary-600)', paddingBottom: 8, marginLeft: 16 }}>Bulanan</Link>
       </div>
 
-      <div className="page-body">
-        {/* Toolbar */}
-        <div className="toolbar no-print">
-          <select
-            id="rekap-bulan-kelas"
-            className="form-control"
-            style={{ width: 'auto' }}
-            value={kelasId}
-            onChange={e => setKelasId(e.target.value)}
-          >
+      <Card padding="sm">
+        <div className="row-4" style={{ flexWrap: 'wrap' }}>
+          <select className="field-input" style={{ width: 'auto', height: 38, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-card)' }} value={kelasId} onChange={e => setKelasId(e.target.value)}>
             {kelasList.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
           </select>
-          <select
-            id="rekap-bulan-bulan"
-            className="form-control"
-            style={{ width: 'auto' }}
-            value={bulan}
-            onChange={e => setBulan(Number(e.target.value))}
-          >
+          <select className="field-input" style={{ width: 'auto', height: 38, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-card)' }} value={bulan} onChange={e => setBulan(Number(e.target.value))}>
             {MONTHS_ID.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
-          <select
-            id="rekap-bulan-tahun"
-            className="form-control"
-            style={{ width: 'auto' }}
-            value={tahun}
-            onChange={e => setTahun(Number(e.target.value))}
-          >
+          <select className="field-input" style={{ width: 'auto', height: 38, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-card)' }} value={tahun} onChange={e => setTahun(Number(e.target.value))}>
             {tahunOptions.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
-          <div className="toolbar-right">
-            <button className="btn" onClick={() => window.print()}>🖨️ Print</button>
-            <button className="btn btn-primary" onClick={handleExport}>📊 Export Excel</button>
-          </div>
         </div>
+      </Card>
 
-        {/* Table wrapper dengan scroll horizontal */}
-        <div className="card">
-          <div className="table-wrapper" style={{ overflowX: 'auto' }}>
-            <table className="op-table" style={{ minWidth: 900 }}>
-              <thead>
-                <tr>
-                  <th style={{ position: 'sticky', left: 0, background: 'var(--bg)', zIndex: 2 }}>No</th>
-                  <th style={{ position: 'sticky', left: 40, background: 'var(--bg)', zIndex: 2, minWidth: 160 }}>Nama Siswa</th>
-                  {days.map(d => <th key={d} style={{ width: 32, textAlign: 'center', padding: '9px 4px' }}>{d}</th>)}
-                  <th style={{ textAlign: 'center', color: 'var(--green)' }}>H</th>
-                  <th style={{ textAlign: 'center', color: 'var(--blue)' }}>I</th>
-                  <th style={{ textAlign: 'center', color: 'var(--orange)' }}>S</th>
-                  <th style={{ textAlign: 'center', color: 'var(--red)' }}>A</th>
-                  <th style={{ textAlign: 'center' }}>D</th>
-                </tr>
-              </thead>
-              <tbody>
-                {siswas.length === 0 ? (
-                  <tr><td colSpan={daysInMonth + 7} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary)' }}>Pilih kelas untuk melihat data</td></tr>
-                ) : siswas.map((siswa, idx) => {
-                  const sum = getSummary(siswa.id);
-                  return (
-                    <tr key={siswa.id}>
-                      <td style={{ position: 'sticky', left: 0, background: 'var(--white)', zIndex: 1 }}>{idx + 1}</td>
-                      <td style={{ position: 'sticky', left: 40, background: 'var(--white)', zIndex: 1, fontWeight: 500 }}>
-                        {siswa.nama}
-                      </td>
-                      {days.map(d => {
-                        const st = getStatusForDay(siswa.id, d);
-                        const cfg = st ? STATUS_ABSENSI[st] : null;
-                        return (
-                          <td key={d} style={{ textAlign: 'center', padding: '4px 2px', fontSize: 11 }}>
-                            {cfg ? <span className={`badge ${cfg.badge}`} style={{ padding: '1px 4px' }}>{cfg.code}</span> : <span style={{ color: '#ddd' }}>·</span>}
-                          </td>
-                        );
-                      })}
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--green)' }}>{sum.H}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--blue)' }}>{sum.I}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--orange)' }}>{sum.S}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--red)' }}>{sum.A}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{sum.D}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+      <Card padding="none">
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
+            <thead>
+              <tr style={{ background: 'var(--color-neutral-50)', borderBottom: '1px solid var(--border-default)', textTransform: 'uppercase', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                <th style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'left', position: 'sticky', left: 0, background: 'var(--color-neutral-50)', zIndex: 2 }}>#</th>
+                <th style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'left', position: 'sticky', left: 40, background: 'var(--color-neutral-50)', zIndex: 2 }}>Nama Siswa</th>
+                {days.map(d => <th key={d} style={{ padding: 'var(--space-3) 4px', textAlign: 'center' }}>{d}</th>)}
+                <th style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', color: 'var(--color-success)' }}>H</th>
+                <th style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', color: 'var(--color-info)' }}>I</th>
+                <th style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', color: 'var(--color-warning)' }}>S</th>
+                <th style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', color: 'var(--color-danger)' }}>A</th>
+                <th style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center' }}>D</th>
+              </tr>
+            </thead>
+            <tbody>
+              {siswas.length === 0 ? (
+                <tr><td colSpan={daysInMonth + 7} style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-muted)' }}>Tidak ada siswa</td></tr>
+              ) : siswas.map((siswa, idx) => {
+                const sum = getSummary(siswa.id);
+                return (
+                  <tr key={siswa.id} style={{ borderBottom: '1px solid var(--color-neutral-100)' }}>
+                    <td style={{ padding: 'var(--space-3) var(--space-4)', position: 'sticky', left: 0, background: 'var(--bg-card)', zIndex: 1 }}>{idx + 1}</td>
+                    <td style={{ padding: 'var(--space-3) var(--space-4)', position: 'sticky', left: 40, background: 'var(--bg-card)', zIndex: 1 }}>{siswa.nama}</td>
+                    {days.map(d => {
+                      const st = getStatusForDay(siswa.id, d);
+                      return (
+                        <td key={d} style={{ padding: '4px', textAlign: 'center' }}>
+                          {st ? <Badge variant={st === 'dispensasi' ? 'terlambat' : st}>{STATUS_ABSENSI[st]?.code}</Badge> : <span style={{ color: 'var(--color-neutral-300)' }}>·</span>}
+                        </td>
+                      );
+                    })}
+                    <td style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', fontWeight: 'bold', color: 'var(--color-success)' }}>{sum.H}</td>
+                    <td style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', fontWeight: 'bold', color: 'var(--color-info)' }}>{sum.I}</td>
+                    <td style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', fontWeight: 'bold', color: 'var(--color-warning)' }}>{sum.S}</td>
+                    <td style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', fontWeight: 'bold', color: 'var(--color-danger)' }}>{sum.A}</td>
+                    <td style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', fontWeight: 'bold' }}>{sum.D}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-
-        {/* Legend */}
-        <div style={{ marginTop: 12, display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-secondary)', flexWrap: 'wrap' }} className="no-print">
-          {Object.entries(STATUS_ABSENSI).map(([k, v]) => (
-            <span key={k}><span className={`badge ${v.badge}`}>{v.code}</span> = {v.label}</span>
-          ))}
-        </div>
-      </div>
+      </Card>
     </div>
   );
 }

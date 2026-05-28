@@ -1,23 +1,21 @@
-// ============================================================
-// pages/ScannerPage.jsx — Professional fullscreen QR scanner
-// iOS/QRIS mobile scanner feel
-// ============================================================
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ContinuousScanner } from '../features/scanner/ContinuousScanner';
 import { queueScan } from '../features/scanner/OfflineQueue';
 import { siswaDB, absensiDB, sesiDB, izinDB, kelasDB } from '../lib/localDB';
 import { parseQR, todayStr, formatWaktu, SCAN_MODES } from '../lib/constants';
-import { CheckCircle, AlertCircle, XCircle, Wifi, WifiOff } from 'lucide-react';
+import { Wifi, WifiOff } from 'lucide-react';
+import Header from '../components/ui/Header';
+import QRScanner from '../components/ui/QRScanner';
+import Button from '../components/ui/Button';
 
-/* ── Duplicate scan guard ───────────────────────────────── */
 const scanCache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 menit
+const CACHE_TTL = 5 * 60 * 1000;
+
 function isDuplicate(key) {
   const t = scanCache.get(key);
   return t && Date.now() - t < CACHE_TTL;
 }
 
-/* ── Beep ───────────────────────────────────────────────── */
 let _audioCtx = null;
 function beep(type = 'success') {
   try {
@@ -46,45 +44,55 @@ function vibrate(pattern) {
   try { navigator.vibrate?.(pattern); } catch (_) {}
 }
 
+function getActiveSesi(sesis) {
+  if (!sesis || sesis.length === 0) return null;
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+  let active = null;
+  for (const s of sesis) {
+    if (timeStr >= s.jam_mulai) active = s;
+  }
+  if (!active) active = sesis[0];
+  return active;
+}
+
 export function ScannerPage({ user }) {
-  const [mode, setMode]                 = useState('absensi');
-  const [selectedSesi, setSelectedSesi] = useState(null);
-  const [sesis, setSesis]               = useState([]);
-  const [toast, setToast]               = useState(null);
-  const [isOnline, setIsOnline]         = useState(navigator.onLine);
+  const [mode, setMode] = useState('absensi');
+  const [sesis, setSesis] = useState([]);
+  const [toast, setToast] = useState(null);
+  const [scanStatus, setScanStatus] = useState('scanning'); // 'scanning' | 'success' | 'error' | 'idle'
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const toastTimerRef = useRef(null);
 
-  // Track online state
   useEffect(() => {
-    const up   = () => setIsOnline(true);
+    const up = () => setIsOnline(true);
     const down = () => setIsOnline(false);
-    window.addEventListener('online',  up);
+    window.addEventListener('online', up);
     window.addEventListener('offline', down);
     return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down); };
   }, []);
 
-  // Load sesi
   useEffect(() => {
     const list = sesiDB.getAll().sort((a, b) => a.urutan - b.urutan);
     setSesis(list);
-    if (list.length > 0) setSelectedSesi(list[0].id);
   }, []);
 
-  // Show result toast
   const showToast = useCallback((payload) => {
     clearTimeout(toastTimerRef.current);
     setToast(payload);
-    toastTimerRef.current = setTimeout(() => setToast(null), 2400);
+    setScanStatus(payload.type); // 'success' or 'error' (warning maps to error visuals for scanner)
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+      setScanStatus('scanning');
+    }, 2400);
   }, []);
 
-  // Main scan handler
   const handleScan = useCallback(async (rawText) => {
     const token = parseQR(rawText);
     if (!token) return;
 
     const siswa = siswaDB.getByQrToken(token);
 
-    // QR tidak dikenali
     if (!siswa || siswa.qr_status !== 'active') {
       vibrate([40, 80, 40]);
       beep('error');
@@ -92,17 +100,28 @@ export function ScannerPage({ user }) {
       return;
     }
 
-    const kelas   = kelasDB.getById(siswa.kelas_id);
+    const kelas = kelasDB.getById(siswa.kelas_id);
     const tanggal = todayStr();
 
-    // ── Mode: Absensi ──────────────────────────────────────
-    if (mode === 'absensi') {
-      if (!selectedSesi) {
-        vibrate([40]);
-        showToast({ type: 'warning', title: 'Pilih Sesi', sub: 'Gunakan dropdown sesi di bawah' });
+    if (user?.role === 'pengawas' && user?.tingkat_akses?.length > 0) {
+      const tingkatSiswa = kelas?.nama.split(' ')[0];
+      if (!user.tingkat_akses.includes(tingkatSiswa)) {
+        vibrate([40, 80, 40]);
+        beep('error');
+        showToast({ type: 'error', title: 'Akses Ditolak', sub: `Anda tidak diizinkan absen siswa kelas ${tingkatSiswa}` });
         return;
       }
+    }
 
+    if (mode === 'absensi') {
+      const activeSesiObj = getActiveSesi(sesis);
+      if (!activeSesiObj) {
+        vibrate([40]);
+        showToast({ type: 'error', title: 'Sesi Belum Diatur', sub: 'Tambahkan sesi di pengaturan' });
+        return;
+      }
+      
+      const selectedSesi = activeSesiObj.id;
       const key = `${siswa.id}_${selectedSesi}_${tanggal}`;
       const alreadyScanned = isDuplicate(key) || absensiDB.existsScan(siswa.id, selectedSesi, tanggal);
 
@@ -110,11 +129,7 @@ export function ScannerPage({ user }) {
         scanCache.set(key, Date.now());
         vibrate([40, 60, 40]);
         beep('error');
-        showToast({
-          type: 'warning',
-          title: siswa.nama,
-          sub: `${kelas?.nama} · Sudah tercatat`,
-        });
+        showToast({ type: 'error', title: siswa.nama, sub: `${kelas?.nama} · Sudah tercatat` });
         return;
       }
 
@@ -128,152 +143,79 @@ export function ScannerPage({ user }) {
 
       siswaDB.update(siswa.id, { last_scan_at: new Date().toISOString() });
 
-      const sesiNama = sesis.find(s => s.id === selectedSesi)?.nama || '';
       vibrate(60);
       beep('success');
-      showToast({
-        type: 'success',
-        title: siswa.nama,
-        sub: `${kelas?.nama} · ${sesiNama}`,
-        time: formatWaktu(new Date().toISOString()),
-      });
+      showToast({ type: 'success', title: siswa.nama, sub: `${kelas?.nama} · ${activeSesiObj.nama}` });
 
-    // ── Mode: Izin Keluar ──────────────────────────────────
     } else if (mode === 'izin_keluar') {
       if (izinDB.getAktif().find(i => i.siswa_id === siswa.id)) {
         vibrate([40, 60, 40]);
         beep('error');
-        showToast({ type: 'warning', title: siswa.nama, sub: `${kelas?.nama} · Sudah dalam izin keluar` });
+        showToast({ type: 'error', title: siswa.nama, sub: `${kelas?.nama} · Sudah dalam izin keluar` });
         return;
       }
       izinDB.create({ siswa_id: siswa.id, petugas_id: user?.id });
       vibrate(60);
       beep('success');
-      showToast({ type: 'success', title: siswa.nama, sub: `${kelas?.nama} · Izin keluar tercatat`, time: formatWaktu(new Date().toISOString()) });
+      showToast({ type: 'success', title: siswa.nama, sub: `${kelas?.nama} · Izin keluar tercatat` });
 
-    // ── Mode: Kembali ──────────────────────────────────────
     } else if (mode === 'kembali') {
       const aktif = izinDB.getAktif().find(i => i.siswa_id === siswa.id);
       if (!aktif) {
         vibrate([40, 60, 40]);
         beep('error');
-        showToast({ type: 'warning', title: siswa.nama, sub: `${kelas?.nama} · Tidak ada izin keluar aktif` });
+        showToast({ type: 'error', title: siswa.nama, sub: `${kelas?.nama} · Tidak ada izin keluar aktif` });
         return;
       }
       izinDB.kembali(aktif.id);
       vibrate(60);
       beep('success');
-      showToast({ type: 'success', title: siswa.nama, sub: `${kelas?.nama} · Kembali ke kelas`, time: formatWaktu(new Date().toISOString()) });
+      showToast({ type: 'success', title: siswa.nama, sub: `${kelas?.nama} · Kembali ke kelas` });
     }
-  }, [mode, selectedSesi, sesis, isOnline, user, showToast]);
+  }, [mode, sesis, isOnline, user, showToast]);
 
   const currentMode = SCAN_MODES?.find(m => m.id === mode) || { label: mode };
+  const activeSesiObj = getActiveSesi(sesis);
+  
+  let modeDisplay = currentMode.label;
+  if (mode === 'absensi' && activeSesiObj) modeDisplay = `Sesi Aktif: ${activeSesiObj.nama}`;
 
   return (
-    <div className="scanner-shell">
-      {/* ── Camera layer ────────────────────────────────── */}
-      <div className="scanner-camera">
-        <ContinuousScanner onScanSuccess={handleScan} active />
-      </div>
-
-      {/* ── Dark gradient overlays ───────────────────────── */}
-      <div className="scanner-grad-top"    aria-hidden="true" />
-      <div className="scanner-grad-bottom" aria-hidden="true" />
-
-      {/* ── Top HUD ─────────────────────────────────────── */}
-      <div className="scanner-hud-top">
-        <div>
-          <div className="scanner-app-title">Scanner QR</div>
-          <div className="scanner-mode-label">{currentMode.label}</div>
-        </div>
-        <div className={`scanner-conn-pill ${isOnline ? 'online' : 'offline'}`}>
-          {isOnline
-            ? <Wifi size={11} strokeWidth={2.5} />
-            : <WifiOff size={11} strokeWidth={2.5} />}
-          {isOnline ? 'Online' : 'Offline'}
-        </div>
-      </div>
-
-      {/* ── Viewfinder ──────────────────────────────────── */}
-      <div className="scanner-viewfinder" aria-hidden="true">
-        <div className="scan-box">
-          {/* 4 corner brackets via pseudo-elements + siblings */}
-          <span className="corner tl" /><span className="corner tr" />
-          <span className="corner bl" /><span className="corner br" />
-          <div className="scan-beam" />
-        </div>
-        <p className="scan-hint">Arahkan ke QR Code siswa</p>
-      </div>
-
-      {/* ── Bottom controls ──────────────────────────────── */}
-      <div className="scanner-controls">
-        {/* Sesi selector — hanya mode absensi */}
-        {mode === 'absensi' && (
-          <div className="sesi-row">
-            <span className="sesi-label">SESI</span>
-            <div className="sesi-select-wrap">
-              <select
-                id="scanner-sesi"
-                className="sesi-select"
-                value={selectedSesi || ''}
-                onChange={e => setSelectedSesi(e.target.value)}
-              >
-                {sesis.length === 0 && <option value="">Memuat sesi…</option>}
-                {sesis.map(s => (
-                  <option key={s.id} value={s.id}>{s.nama} · {s.jam_mulai}</option>
-                ))}
-              </select>
-              <span className="sesi-arrow">▾</span>
-            </div>
+    <div className="stack-6" style={{ height: '100%' }}>
+      <Header
+        title="Scanner QR"
+        subtitle={modeDisplay}
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: isOnline ? 'var(--color-primary-600)' : 'var(--color-neutral-500)', background: isOnline ? 'var(--color-primary-50)' : 'var(--color-neutral-100)', padding: '6px 12px', borderRadius: 999 }}>
+            {isOnline ? <Wifi size={16} /> : <WifiOff size={16} />}
+            {isOnline ? 'Online' : 'Offline'}
           </div>
-        )}
+        }
+      />
 
-        {/* Mode buttons */}
-        <div className="mode-group">
-          {(SCAN_MODES || [
-            { id: 'absensi',    label: 'Absensi'  },
-            { id: 'izin_keluar',label: 'Izin'     },
-            { id: 'kembali',    label: 'Kembali'  },
-          ]).map(m => (
-            <button
-              key={m.id}
-              id={`mode-${m.id}`}
-              className={`mode-btn${mode === m.id ? ' active' : ''}`}
-              onClick={() => setMode(m.id)}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <QRScanner status={scanStatus} message={toast ? `${toast.title} - ${toast.sub}` : 'Arahkan ke QR Code siswa'}>
+          <div style={{ position: 'absolute', inset: 0 }}>
+            <ContinuousScanner onScanSuccess={handleScan} active />
+          </div>
+        </QRScanner>
       </div>
 
-      {/* ── Result Toast ─────────────────────────────────── */}
-      {toast && <ScanToast {...toast} />}
-    </div>
-  );
-}
-
-/* ── Toast component ──────────────────────────────────────── */
-function ScanToast({ type, title, sub, time }) {
-  const Icon = type === 'success' ? CheckCircle
-             : type === 'warning' ? AlertCircle
-             : XCircle;
-
-  const colors = {
-    success: { icon: '#34C759', border: 'rgba(52,199,89,0.25)' },
-    warning: { icon: '#FF9F0A', border: 'rgba(255,159,10,0.25)' },
-    error:   { icon: '#FF453A', border: 'rgba(255,69,58,0.25)'  },
-  }[type] || {};
-
-  return (
-    <div className="scan-toast" style={{ borderColor: colors.border }}>
-      <div className="toast-icon-wrap" style={{ color: colors.icon }}>
-        <Icon size={22} strokeWidth={2} />
-      </div>
-      <div className="toast-body">
-        <div className="toast-title">{title}</div>
-        {sub  && <div className="toast-sub">{sub}</div>}
-        {time && <div className="toast-time">{time}</div>}
+      <div className="grid-3" style={{ marginTop: 'auto' }}>
+        {(SCAN_MODES || [
+          { id: 'absensi', label: 'Absensi' },
+          { id: 'izin_keluar', label: 'Izin' },
+          { id: 'kembali', label: 'Kembali' },
+        ]).map(m => (
+          <Button
+            key={m.id}
+            variant={mode === m.id ? 'primary' : 'ghost'}
+            onClick={() => setMode(m.id)}
+            fullWidth
+          >
+            {m.label}
+          </Button>
+        ))}
       </div>
     </div>
   );

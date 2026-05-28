@@ -20,10 +20,10 @@ export function seedIfEmpty() {
   if (getStore('kelas').length > 0) return;
 
   const kelasData = [
-    { id: uuidv4(), nama: 'X IPA 1', wali_kelas: 'Budi Santoso, S.Pd' },
-    { id: uuidv4(), nama: 'X IPA 2', wali_kelas: 'Siti Rahayu, S.Pd' },
-    { id: uuidv4(), nama: 'XI IPS 1', wali_kelas: 'Ahmad Fauzi, S.Pd' },
-    { id: uuidv4(), nama: 'XII IPA 1', wali_kelas: 'Dewi Kartika, S.Pd' },
+    { id: uuidv4(), nama: 'X IPA 1' },
+    { id: uuidv4(), nama: 'X IPA 2' },
+    { id: uuidv4(), nama: 'XI IPS 1' },
+    { id: uuidv4(), nama: 'XII IPA 1' },
   ];
   setStore('kelas', kelasData);
 
@@ -60,10 +60,31 @@ export function seedIfEmpty() {
 
   setStore('users', [
     { id: uuidv4(), nama: 'Administrator', username: 'admin', password: 'admin123', role: 'admin' },
-    { id: uuidv4(), nama: 'Petugas TU', username: 'tu', password: 'tu123', role: 'tu' },
-    { id: uuidv4(), nama: 'Wali Kelas X', username: 'wali', password: 'wali123', role: 'wali_kelas' },
+    { id: uuidv4(), nama: 'Tata Usaha', username: 'tu', password: 'tu123', role: 'admin' },
+    { id: uuidv4(), nama: 'Wali Kelas', username: 'wali', password: 'wali123', role: 'pengawas', kelas_ids: [] },
   ]);
 }
+
+// ── USERS ────────────────────────────────────────────────────
+export const usersDB = {
+  getAll: () => getStore('users'),
+  getById: (id) => getStore('users').find(u => u.id === id),
+  create: (data) => {
+    const list = getStore('users');
+    const item = { id: uuidv4(), ...data };
+    list.push(item);
+    setStore('users', list);
+    return item;
+  },
+  update: (id, data) => {
+    const list = getStore('users').map(u => u.id === id ? { ...u, ...data } : u);
+    setStore('users', list);
+    return list.find(u => u.id === id);
+  },
+  delete: (id) => {
+    setStore('users', getStore('users').filter(u => u.id !== id));
+  },
+};
 
 // ── KELAS ────────────────────────────────────────────────────
 export const kelasDB = {

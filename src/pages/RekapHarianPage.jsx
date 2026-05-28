@@ -1,183 +1,127 @@
-// ============================================================
-// pages/RekapHarianPage.jsx
-// Direct manipulation · Inline popover editing · No action column
-// ============================================================
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { absensiDB, siswaDB, kelasDB, sesiDB } from '../lib/localDB';
 import { STATUS_ABSENSI, todayStr, formatTanggal, DAYS_ID } from '../lib/constants';
 import { exportRekapHarian } from '../features/reports/exportToExcel';
-import { Download, Printer } from 'lucide-react';
+import { Download, Printer, Search } from 'lucide-react';
+import Header from '../components/ui/Header';
+import Card from '../components/ui/Card';
+import Table from '../components/ui/Table';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import Badge from '../components/ui/Badge';
+import StatCard from '../components/ui/StatCard';
 
-/* ── Status configuration ────────────────────────────────── */
 const STATUS_CONFIG = {
-  hadir:      { code: 'H', label: 'Hadir',      cls: 'sp-H' },
-  izin:       { code: 'I', label: 'Izin',       cls: 'sp-I' },
-  sakit:      { code: 'S', label: 'Sakit',      cls: 'sp-S' },
-  alpha:      { code: 'A', label: 'Alpha',      cls: 'sp-A' },
-  dispensasi: { code: 'D', label: 'Disp.',      cls: 'sp-D' },
+  hadir:      { code: 'H', label: 'Hadir',      variant: 'hadir' },
+  izin:       { code: 'I', label: 'Izin',       variant: 'izin' },
+  sakit:      { code: 'S', label: 'Sakit',      variant: 'sakit' },
+  alpha:      { code: 'A', label: 'Alpha',      variant: 'alpha' },
+  dispensasi: { code: 'D', label: 'Disp.',      variant: 'terlambat' },
 };
 
-/* ── Inline Status Popover ───────────────────────────────── */
-/*
-  Mounts at document.body via a portal-like absolute positioning.
-  Appears near the clicked cell, auto-dismisses on outside click.
-*/
 function StatusPopover({ cellRef, current, onSelect, onClose }) {
   const popRef = useRef(null);
-
-  // Position calculation
   const [pos, setPos] = useState({ top: 0, left: 0, above: false });
 
   useEffect(() => {
     if (!cellRef?.current) return;
     const rect = cellRef.current.getBoundingClientRect();
-    const popH = 52; // estimated popover height
+    const popH = 52;
     const spaceBelow = window.innerHeight - rect.bottom;
     const above = spaceBelow < popH + 12;
 
     setPos({
-      top: above
-        ? rect.top + window.scrollY - popH - 6
-        : rect.bottom + window.scrollY + 6,
-      left: Math.min(
-        rect.left + window.scrollX + rect.width / 2,
-        window.innerWidth - 180
-      ),
+      top: above ? rect.top + window.scrollY - popH - 6 : rect.bottom + window.scrollY + 6,
+      left: Math.min(rect.left + window.scrollX + rect.width / 2 - 40, window.innerWidth - 120),
       above,
     });
   }, [cellRef]);
 
-  // Outside click
   useEffect(() => {
     function handler(e) {
-      if (popRef.current && !popRef.current.contains(e.target) &&
-          cellRef.current && !cellRef.current.contains(e.target)) {
+      if (popRef.current && !popRef.current.contains(e.target) && cellRef.current && !cellRef.current.contains(e.target)) {
         onClose();
       }
     }
-    // Small delay so the opening click doesn't immediately close
     const t = setTimeout(() => document.addEventListener('mousedown', handler), 80);
     return () => { clearTimeout(t); document.removeEventListener('mousedown', handler); };
   }, [onClose, cellRef]);
 
-  // Keyboard dismiss
-  useEffect(() => {
-    const handler = e => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
-
   return (
     <div
       ref={popRef}
-      className={`status-popover${pos.above ? ' pop-above' : ''}`}
-      style={{ top: pos.top, left: pos.left }}
-      role="menu"
+      style={{
+        position: 'absolute', top: pos.top, left: pos.left,
+        background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+        borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)',
+        padding: 'var(--space-2)', display: 'flex', gap: 'var(--space-1)', zIndex: 100
+      }}
     >
-      <div className="pop-arrow" />
       {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
         <button
           key={key}
-          className={`pop-option ${cfg.cls}${current === key ? ' is-current' : ''}`}
           onClick={() => { onSelect(key); onClose(); }}
-          role="menuitem"
+          style={{
+            border: 'none', background: current === key ? 'var(--color-neutral-100)' : 'transparent',
+            padding: '4px 8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+            fontSize: 'var(--text-xs)', fontWeight: 'bold'
+          }}
+          title={cfg.label}
         >
-          <span className="pop-code">{cfg.code}</span>
-          <span className="pop-label">{cfg.label}</span>
+          {cfg.code}
         </button>
       ))}
     </div>
   );
 }
 
-/* ── Attendance Cell (single sesi) ───────────────────────── */
 function AttendanceCell({ siswa, sesi, record, canEdit, onUpdate }) {
   const [open, setOpen] = useState(false);
   const cellRef = useRef(null);
   const status = record?.status || 'alpha';
-  const cfg    = STATUS_CONFIG[status] || STATUS_CONFIG.alpha;
-  const hasNote = !!record?.catatan;
-
-  function handleSelect(newStatus) {
-    onUpdate(siswa, sesi, record, newStatus);
-  }
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.alpha;
 
   return (
-    <td className="td-center atn-cell" ref={cellRef}>
+    <div ref={cellRef} style={{ display: 'inline-block' }}>
       <button
-        className={`sp-pill ${cfg.cls}${canEdit ? ' sp-interactive' : ''}`}
+        style={{ background: 'transparent', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: 0 }}
         onClick={canEdit ? () => setOpen(v => !v) : undefined}
-        disabled={!canEdit}
-        title={canEdit ? `${cfg.label} — klik untuk ubah` : cfg.label}
-        aria-haspopup={canEdit ? 'menu' : undefined}
-        aria-expanded={open}
+        title={cfg.label}
       >
-        {cfg.code}
-        {hasNote && <span className="sp-note-dot" aria-hidden="true" />}
+        <Badge variant={cfg.variant}>{cfg.code}</Badge>
       </button>
 
       {open && canEdit && (
-        <StatusPopover
-          cellRef={cellRef}
-          current={status}
-          onSelect={handleSelect}
-          onClose={() => setOpen(false)}
-        />
+        <StatusPopover cellRef={cellRef} current={status} onSelect={(newStatus) => onUpdate(siswa, sesi, record, newStatus)} onClose={() => setOpen(false)} />
       )}
-    </td>
-  );
-}
-
-/* ── Summary bar ─────────────────────────────────────────── */
-function SummaryBar({ summary }) {
-  return (
-    <div className="summary-bar no-print">
-      <div className="summary-total">
-        <span className="summary-total-num">{summary.total}</span>
-        <span className="summary-total-label">siswa</span>
-      </div>
-      <div className="summary-sep" />
-      {[
-        { key: 'H', label: 'Hadir',      cls: 'sp-H' },
-        { key: 'I', label: 'Izin',       cls: 'sp-I' },
-        { key: 'S', label: 'Sakit',      cls: 'sp-S' },
-        { key: 'A', label: 'Alpha',      cls: 'sp-A' },
-        { key: 'D', label: 'Disp.',      cls: 'sp-D' },
-      ].map(i => (
-        <div key={i.key} className="summary-item">
-          <span className={`summary-val ${i.cls}`}>{summary[i.key]}</span>
-          <span className="summary-lbl">{i.label}</span>
-        </div>
-      ))}
     </div>
   );
 }
 
-/* ── Main page ───────────────────────────────────────────── */
 export function RekapHarianPage({ user }) {
-  const [tanggal, setTanggal]         = useState(todayStr());
-  const [kelasId, setKelasId]         = useState('');
-  const [kelasList, setKelasList]     = useState([]);
-  const [sesis, setSesis]             = useState([]);
+  const [tanggal, setTanggal] = useState(todayStr());
+  const [kelasId, setKelasId] = useState('');
+  const [kelasList, setKelasList] = useState([]);
+  const [sesis, setSesis] = useState([]);
   const [absensiData, setAbsensiData] = useState([]);
-  const [search, setSearch]           = useState('');
+  const [search, setSearch] = useState('');
 
   const canEdit = ['admin', 'wali_kelas'].includes(user?.role);
 
   useEffect(() => {
-    setKelasList(kelasDB.getAll());
+    let allKelas = kelasDB.getAll();
+    if (user?.role === 'pengawas' && user?.tingkat_akses?.length > 0) {
+      allKelas = allKelas.filter(k => user.tingkat_akses.includes(k.nama.split(' ')[0]));
+    }
+    setKelasList(allKelas);
     setSesis(sesiDB.getAll().sort((a, b) => a.urutan - b.urutan));
-  }, []);
+  }, [user]);
 
-  useEffect(() => {
-    if (kelasList.length > 0 && !kelasId) setKelasId(kelasList[0].id);
-  }, [kelasList]);
-
+  useEffect(() => { if (kelasList.length > 0 && !kelasId) setKelasId(kelasList[0].id); }, [kelasList]);
   useEffect(() => { if (kelasId) loadData(); }, [tanggal, kelasId]);
 
-  function loadData() {
-    setAbsensiData(absensiDB.getByTanggalKelas(tanggal, kelasId));
-  }
+  function loadData() { setAbsensiData(absensiDB.getByTanggalKelas(tanggal, kelasId)); }
 
   const siswas = useMemo(() => {
     if (!kelasId) return [];
@@ -208,185 +152,76 @@ export function RekapHarianPage({ user }) {
     return { ...s, total: siswas.length };
   }, [siswas, sesis, absensiMap]);
 
-  // Inline update — no modal needed
   const handleUpdate = useCallback((siswa, sesi, existing, newStatus) => {
     if (existing) {
       absensiDB.update(existing.id, { status: newStatus, updated_by: user?.id });
     } else {
-      absensiDB.create({
-        siswa_id: siswa.id,
-        sesi_id: sesi.id,
-        tanggal,
-        status: newStatus,
-        catatan: '',
-      });
+      absensiDB.create({ siswa_id: siswa.id, sesi_id: sesi.id, tanggal, status: newStatus, catatan: '' });
     }
-    // Optimistic refresh
     setAbsensiData(absensiDB.getByTanggalKelas(tanggal, kelasId));
   }, [tanggal, kelasId, user]);
 
-  function handleExport() {
-    const kelas = kelasDB.getById(kelasId);
-    const absensiByDate = {};
-    absensiData.forEach(a => {
-      absensiByDate[`${a.siswa_id}_${a.sesi_id}_${tanggal}`] = a.status;
-    });
-    exportRekapHarian({ siswas, absensiByDate, sesis, tanggal, namaKelas: kelas?.nama });
-  }
+  const hariStr = `${DAYS_ID[new Date(tanggal + 'T00:00:00').getDay()]}, ${formatTanggal(tanggal + 'T00:00:00')}`;
+  const kelas = kelasDB.getById(kelasId);
 
-  const hari    = new Date(tanggal + 'T00:00:00');
-  const hariStr = `${DAYS_ID[hari.getDay()]}, ${formatTanggal(tanggal + 'T00:00:00')}`;
-  const kelas   = kelasDB.getById(kelasId);
+  const columns = [
+    { key: 'index', label: '#', width: '50px', render: (_, __, i) => i + 1 },
+    { key: 'nis', label: 'NIS', width: '100px' },
+    { key: 'nama', label: 'Nama Siswa' },
+    ...sesis.map(s => ({
+      key: `sesi_${s.id}`,
+      label: s.nama,
+      align: 'center',
+      render: (_, row) => (
+        <AttendanceCell siswa={row} sesi={s} record={absensiMap[`${row.id}_${s.id}`]} canEdit={canEdit} onUpdate={handleUpdate} />
+      )
+    }))
+  ];
 
   return (
-    <div>
-      {/* Page Header */}
-      <div className="page-header no-print">
-        <div className="page-header-left">
-          <h1 className="page-title">Rekap Harian</h1>
-          <span className="page-subtitle">{hariStr}</span>
-        </div>
-        <div className="page-header-actions">
-          <button className="btn btn-sm no-print" onClick={() => window.print()}>
-            <Printer size={13} strokeWidth={1.8} />Cetak
-          </button>
-          <button className="btn btn-sm btn-primary no-print" onClick={handleExport}>
-            <Download size={13} strokeWidth={1.8} />Excel
-          </button>
-        </div>
+    <div className="stack-6">
+      <Header
+        title="Rekap Absensi Harian"
+        subtitle={hariStr}
+        actions={
+          <div className="row-3">
+            <Button size="sm" variant="ghost" onClick={() => window.print()} icon={<Printer size={16} />}>Cetak</Button>
+            <Button size="sm" onClick={() => exportRekapHarian({ siswas, absensiByDate: {}, sesis, tanggal, namaKelas: kelas?.nama })} icon={<Download size={16} />}>Excel</Button>
+          </div>
+        }
+      />
+
+      <div className="row-3" style={{ borderBottom: '1px solid var(--border-default)', paddingBottom: 8 }}>
+        <Link to="/rekap-harian" style={{ fontWeight: 'bold', color: 'var(--color-primary-600)', textDecoration: 'none', borderBottom: '2px solid var(--color-primary-600)', paddingBottom: 8 }}>Harian</Link>
+        <Link to="/rekap-bulanan" style={{ color: 'var(--text-secondary)', textDecoration: 'none', paddingBottom: 8, marginLeft: 16 }}>Bulanan</Link>
       </div>
 
-      <div className="page-content">
-
-        {/* Compact Toolbar */}
-        <div className="toolbar no-print">
-          <select
-            id="rekap-kelas"
-            className="field-input"
-            value={kelasId}
-            onChange={e => setKelasId(e.target.value)}
-          >
+      {/* Toolbar */}
+      <Card padding="sm">
+        <div className="row-4" style={{ flexWrap: 'wrap' }}>
+          <select className="field-input" style={{ width: 'auto', height: 38 }} value={kelasId} onChange={e => setKelasId(e.target.value)}>
             {kelasList.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
           </select>
-          <input
-            id="rekap-tanggal"
-            type="date"
-            className="field-input"
-            value={tanggal}
-            onChange={e => setTanggal(e.target.value)}
-          />
-          <div className="toolbar-sep" />
-          <input
-            id="rekap-search"
-            type="text"
-            className="field-input"
-            placeholder="Cari nama…"
-            style={{ width: 150 }}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-
-        {/* Summary */}
-        <SummaryBar summary={summary} />
-
-        {/* Table card */}
-        <div className="card">
-          {/* Card meta row */}
-          <div className="rh-table-head">
-            <div className="rh-table-head-left">
-              <span className="rh-kelas-badge">{kelas?.nama || '—'}</span>
-              <span className="rh-row-count">{filtered.length} siswa</span>
-              {canEdit && (
-                <span className="rh-edit-hint no-print">Ketuk badge untuk ubah status</span>
-              )}
-            </div>
-            {/* Legend */}
-            <div className="rh-legend no-print">
-              {Object.entries(STATUS_CONFIG).map(([k, cfg]) => (
-                <span key={k} className="rh-legend-item">
-                  <span className={`sp-pill ${cfg.cls}`}>{cfg.code}</span>
-                  <span>{cfg.label}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Table */}
-          <div className="table-wrap">
-            <table className="data-table rh-table">
-              <thead>
-                <tr>
-                  <th className="th-num">#</th>
-                  <th className="th-nis">NIS</th>
-                  <th>Nama Siswa</th>
-                  {sesis.map(s => (
-                    <th key={s.id} className="th-center th-sesi">
-                      <div className="sesi-header">
-                        <span className="sesi-name">{s.nama}</span>
-                        {s.jam_mulai && <span className="sesi-jam">{s.jam_mulai}</span>}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={3 + sesis.length}>
-                      <div className="empty" style={{ padding: '40px 24px' }}>
-                        <div className="empty-title">Tidak ada siswa</div>
-                        <div className="empty-desc">Pilih kelas atau ubah pencarian</div>
-                      </div>
-                    </td>
-                  </tr>
-                ) : filtered.map((sw, idx) => {
-                  // Primary status untuk hierarchy hint
-                  const firstRec = sesis.map(se => absensiMap[`${sw.id}_${se.id}`]).find(Boolean);
-                  const primarySt = firstRec?.status;
-
-                  return (
-                    <tr key={sw.id}>
-                      <td className="td-num">{idx + 1}</td>
-                      <td className="td-nis">{sw.nis}</td>
-                      <td>
-                        <div className="rh-student">
-                          <span className="rh-student-name">{sw.nama}</span>
-                          {primarySt && primarySt !== 'hadir' && (
-                            <span className="rh-student-note">
-                              {STATUS_CONFIG[primarySt]?.label}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Attendance cells — NO separate action column */}
-                      {sesis.map(sesi => {
-                        const rec = absensiMap[`${sw.id}_${sesi.id}`];
-                        return (
-                          <AttendanceCell
-                            key={sesi.id}
-                            siswa={sw}
-                            sesi={sesi}
-                            record={rec}
-                            canEdit={canEdit}
-                            onUpdate={handleUpdate}
-                          />
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="card-footer">
-            <span className="cf-count">{filtered.length}/{siswas.length} siswa</span>
-            <span className="cf-date">{hariStr}</span>
+          <input type="date" className="field-input" style={{ width: 'auto', height: 38 }} value={tanggal} onChange={e => setTanggal(e.target.value)} />
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <Input icon={<Search size={16} />} placeholder="Cari nama atau NIS…" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
         </div>
+      </Card>
+
+      <div className="grid-stats">
+        <StatCard label="Hadir" value={summary.H} color="green" icon={<span style={{fontWeight:'bold'}}>H</span>} />
+        <StatCard label="Izin" value={summary.I} color="blue" icon={<span style={{fontWeight:'bold'}}>I</span>} />
+        <StatCard label="Sakit" value={summary.S} color="amber" icon={<span style={{fontWeight:'bold'}}>S</span>} />
+        <StatCard label="Alpha" value={summary.A} color="red" icon={<span style={{fontWeight:'bold'}}>A</span>} />
       </div>
+
+      <Table
+        columns={columns}
+        data={filtered}
+        keyExtractor={row => row.id}
+        emptyMessage="Pilih kelas atau tidak ada siswa"
+      />
     </div>
   );
 }

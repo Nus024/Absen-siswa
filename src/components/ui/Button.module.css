@@ -1,0 +1,58 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--font-sans);
+  font-weight: var(--font-semibold);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  border-radius: var(--radius-lg);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+  white-space: nowrap;
+  text-decoration: none;
+  outline: none;
+}
+
+.btn:focus-visible { box-shadow: 0 0 0 3px var(--color-primary-200); }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Sizes */
+.sm { font-size: var(--text-xs); padding: var(--space-2) var(--space-3); height: 32px; border-radius: var(--radius-md); }
+.md { font-size: var(--text-sm); padding: var(--space-2) var(--space-5); height: 40px; }
+.lg { font-size: var(--text-base); padding: var(--space-3) var(--space-6); height: 48px; border-radius: var(--radius-xl); }
+
+/* Variants */
+.primary { background: var(--color-primary-500); color: var(--text-inverse); border-color: var(--color-primary-500); }
+.primary:hover:not(:disabled) { background: var(--color-primary-600); border-color: var(--color-primary-600); box-shadow: var(--shadow-sm); }
+
+.secondary { background: var(--color-primary-50); color: var(--color-primary-700); border-color: var(--color-primary-200); }
+.secondary:hover:not(:disabled) { background: var(--color-primary-100); border-color: var(--color-primary-300); }
+
+.ghost { background: transparent; color: var(--text-secondary); border-color: var(--border-default); }
+.ghost:hover:not(:disabled) { background: var(--color-neutral-100); color: var(--text-primary); }
+
+.danger { background: #fef2f2; color: var(--color-danger); border-color: #fecaca; }
+.danger:hover:not(:disabled) { background: #fee2e2; }
+
+/* Modifiers */
+.fullWidth { width: 100%; }
+
+/* Spinner */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 600ms linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.icon { display: flex; align-items: center; width: 18px; height: 18px; }
