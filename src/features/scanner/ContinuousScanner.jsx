@@ -123,6 +123,12 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
     pausedRef.current = paused;
   }, [paused]);
 
+  // Simpan callback ke ref agar loop rAF tidak menahan closure fungsi yang lama (stale closure)
+  const onScanSuccessRef = useRef(onScanSuccess);
+  useEffect(() => {
+    onScanSuccessRef.current = onScanSuccess;
+  }, [onScanSuccess]);
+
   // ── Scan loop ──────────────────────────────────────────
   const startScanLoop = useCallback(() => {
     const video  = videoRef.current;
@@ -158,7 +164,7 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
               // Debounce cerdas: abaikan QR sama dalam 1 detik
               if (decoded !== last.text || now2 - last.at > 1000) {
                 lastScanRef.current = { text: decoded, at: now2 };
-                onScanSuccess?.(decoded);
+                onScanSuccessRef.current?.(decoded);
               }
             }
           } catch (_) {
@@ -171,7 +177,7 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
     };
 
     rafRef.current = requestAnimationFrame(loop);
-  }, [onScanSuccess]);
+  }, []);
 
   // ── Start camera ───────────────────────────────────────
   const startCamera = useCallback(async () => {
