@@ -86,19 +86,13 @@ export const siswaService = {
     if (error) throw error;
   },
 
-  async regenerateQr(id) {
-    // Gunakan PostgreSQL uuid_generate_v4() via RPC atau generate di client
-    const newToken = crypto.randomUUID();
-    const { data, error } = await supabase
-      .from('siswa')
-      .update({
-        qr_token:             newToken,
-        qr_generated_at:      new Date().toISOString(),
-        qr_regenerated_count: supabase.rpc ? undefined : 0, // updated via trigger / manual
-      })
-      .eq('id', id)
-      .select()
-      .single();
+  async regenerateQr(id, changedBy = null, reason = 'Regenerate manual oleh administrator') {
+    // Memanggil RPC resmi di database Supabase untuk menjamin atomisitas transaksi & audit trail
+    const { data, error } = await supabase.rpc('regenerate_student_qr', {
+      student_id:    id,
+      admin_id:      changedBy,
+      change_reason: reason
+    });
     if (error) throw error;
     return data;
   },

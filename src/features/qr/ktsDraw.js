@@ -14,7 +14,7 @@ export function drawKtsCard(canvas, { nis, nama, kelasNama, qrToken }, callback)
     const qrCanvas = document.createElement('canvas');
     import('qrcode').then((QRCodeLib) => {
       const QRCode = QRCodeLib.default || QRCodeLib;
-      QRCode.toCanvas(qrCanvas, `SISWA:${qrToken}`, {
+      QRCode.toCanvas(qrCanvas, qrToken, {
         width: 380,
         margin: 1,
         color: {

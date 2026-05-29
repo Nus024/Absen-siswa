@@ -26,7 +26,7 @@ function PreviewKtsModal({ siswa, onClose }) {
     kelasService.getById(siswa.kelas_id)
       .then(kelas => {
         const kelasNama = kelas?.nama || '—';
-        const payload = `${siswa.nis}::${siswa.nama}`;
+        const payload = siswa.qr_token || `${siswa.nis}::${siswa.nama}`;
         return import('../features/qr/ktsDraw').then(({ drawKtsCard }) => {
           drawKtsCard(canvasRef.current, {
             nis: siswa.nis, nama: siswa.nama, kelasNama, qrToken: payload
@@ -147,7 +147,7 @@ export function QRManagementPage({ user }) {
       nis: siswa.nis,
       nama: siswa.nama,
       kelasNama: kelas?.nama || '—',
-      qrToken: `${siswa.nis}::${siswa.nama}`
+      qrToken: siswa.qr_token || `${siswa.nis}::${siswa.nama}`
     }, () => {
       const cardDataUrl = canvas.toDataURL('image/jpeg', 0.95);
       const w = window.open('', '_blank', 'width=520,height=380');
@@ -180,7 +180,7 @@ export function QRManagementPage({ user }) {
           nis: siswa.nis,
           nama: siswa.nama,
           kelasNama: kelas?.nama || '—',
-          qrToken: `${siswa.nis}::${siswa.nama}`
+          qrToken: siswa.qr_token || `${siswa.nis}::${siswa.nama}`
         }, () => {
           renderedCards.push({
             nama: siswa.nama,
@@ -220,7 +220,7 @@ export function QRManagementPage({ user }) {
       message: `Reset QR untuk ${siswa.nama}? QR lama tidak akan berlaku lagi.`,
       onConfirm: async () => {
         try {
-          await siswaService.regenerateQr(siswa.id);
+          await siswaService.regenerateQr(siswa.id, user?.id);
           const fresh = await siswaService.getByKelas(kelasId);
           setSiswas(fresh);
         } catch (err) {

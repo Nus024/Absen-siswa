@@ -119,6 +119,7 @@ export const siswaDB = {
       id: uuidv4(), qr_token: uuidv4(), qr_status: 'active',
       qr_generated_at: new Date().toISOString(),
       qr_regenerated_count: 0, last_scan_at: null,
+      qr_version: 1, // Default version 1
       ...data
     };
     list.push(item);
@@ -133,12 +134,39 @@ export const siswaDB = {
   delete: (id) => {
     setStore('siswa', getStore('siswa').filter(s => s.id !== id));
   },
-  regenerateQr: (id) => {
-    const list = getStore('siswa').map(s => s.id === id ? {
-      ...s, qr_token: uuidv4(),
-      qr_generated_at: new Date().toISOString(),
-      qr_regenerated_count: (s.qr_regenerated_count || 0) + 1,
-    } : s);
+  regenerateQr: (id, changedBy = null, reason = 'Regenerate manual oleh administrator') => {
+    const list = getStore('siswa').map(s => {
+      if (s.id === id) {
+        const oldToken = s.qr_token;
+        const oldVersion = s.qr_version || 1;
+        const newToken = uuidv4();
+        const newVersion = oldVersion + 1;
+
+        // Catat ke riwayat lokal di localStorage
+        const historyList = getStore('student_qr_history');
+        historyList.push({
+          id: uuidv4(),
+          student_id: id,
+          old_qr_token: oldToken,
+          new_qr_token: newToken,
+          old_version: oldVersion,
+          new_version: newVersion,
+          reason,
+          changed_by: changedBy,
+          created_at: new Date().toISOString()
+        });
+        setStore('student_qr_history', historyList);
+
+        return {
+          ...s,
+          qr_token:             newToken,
+          qr_version:           newVersion,
+          qr_generated_at:      new Date().toISOString(),
+          qr_regenerated_count: (s.qr_regenerated_count || 0) + 1,
+        };
+      }
+      return s;
+    });
     setStore('siswa', list);
     return list.find(s => s.id === id);
   },

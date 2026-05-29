@@ -108,8 +108,13 @@ export function ScannerPage({ user }) {
     processingRef.current = true;
     setIsProcessing(true);
 
-    // 1. Pre-validation QR
-    const isValidFormat = rawText && (rawText.startsWith('SISWA:') || rawText.includes('::'));
+    // 1. Pre-validation QR (Mendukung UUID murni, SISWA:UUID, dan NIS::NAMA legacy)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawText);
+    const isSiswaUuid = rawText && rawText.startsWith('SISWA:') && 
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawText.substring(6));
+    const isLegacy = rawText && rawText.includes('::');
+    
+    const isValidFormat = rawText && (isUuid || isSiswaUuid || isLegacy);
     if (!isValidFormat) {
       vibrate([40, 80, 40]);
       beep('error');
@@ -127,7 +132,7 @@ export function ScannerPage({ user }) {
 
     // Dapatkan nama optimis jika tersedia (format legacy NIS::NAMA)
     let optimisticName = 'Siswa Terdeteksi';
-    if (rawText.includes('::')) {
+    if (isLegacy) {
       const parts = rawText.split('::');
       if (parts.length > 1 && parts[1]) optimisticName = parts[1].trim();
     } else {
@@ -146,10 +151,12 @@ export function ScannerPage({ user }) {
     (async () => {
       try {
         let token = null;
-        if (rawText.startsWith('SISWA:')) {
-          token = rawText.replace('SISWA:', '').trim();
-        } else {
-          token = rawText.trim();
+        if (isSiswaUuid) {
+          token = rawText.substring(6).trim(); // Ekstrak UUID dari prefix "SISWA:"
+        } else if (isUuid) {
+          token = rawText.trim(); // UUID murni langsung
+        } else if (isLegacy) {
+          token = rawText.trim(); // Token legacy (NIS::NAMA)
         }
 
         if (!token) throw new Error('Token kosong');

@@ -25,7 +25,7 @@ function QRModal({ siswa, onClose }) {
       .then(kelas => {
         const kNama = kelas?.nama || '—';
         setKelasNama(kNama);
-        const payload = `${siswa.nis}::${siswa.nama}`;
+        const payload = siswa.qr_token || `${siswa.nis}::${siswa.nama}`;
         import('../features/qr/ktsDraw').then(({ drawKtsCard }) => {
           drawKtsCard(canvasRef.current, {
             nis: siswa.nis,
@@ -558,7 +558,7 @@ function ManageSiswa({ canAdmin }) {
 
       for (const siswa of filtered) {
         const kelasNama = kelasMap.get(siswa.kelas_id) || '—';
-        const payload = `${siswa.nis}::${siswa.nama}`;
+        const payload = siswa.qr_token || `${siswa.nis}::${siswa.nama}`;
 
         await new Promise((resolve) => {
           drawKtsCard(tempCanvas, {
