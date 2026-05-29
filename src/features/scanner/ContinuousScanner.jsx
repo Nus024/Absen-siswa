@@ -31,6 +31,23 @@ async function killStream() {
   }
 }
 
+// Caching library jsQR secara global agar tidak import di setiap frame
+let jsQRInstance = null;
+async function preloadJsQR() {
+  if (jsQRInstance) return jsQRInstance;
+  try {
+    const jsQRLib = await import('jsqr');
+    jsQRInstance = jsQRLib.default || jsQRLib;
+    return jsQRInstance;
+  } catch (err) {
+    console.error('Gagal memuat jsQR:', err);
+    return null;
+  }
+}
+
+// Jalankan preload di latar belakang saat aplikasi dimuat
+preloadJsQR();
+
 // Detect BarcodeDetector API (Chrome 83+, Samsung Browser, Edge)
 const hasBarcodeDetector =
   typeof window !== 'undefined' &&
@@ -48,10 +65,22 @@ async function decodeFrame(canvas, ctx, video) {
   const { videoWidth: w, videoHeight: h } = video;
   if (!w || !h) return null;
 
-  // Gambar frame video ke canvas
-  canvas.width  = w;
-  canvas.height = h;
-  ctx.drawImage(video, 0, 0, w, h);
+  // Jika menggunakan native BarcodeDetector, tidak usah dikecilkan.
+  // Tapi jika menggunakan jsQR (CPU-bound), kita kecilkan canvas agar komputasi jauh lebih ringan.
+  const useNative = !!_barcodeDetector;
+  let decodeW = w;
+  let decodeH = h;
+  
+  if (!useNative && w > 800) {
+    const scale = 800 / w;
+    decodeW = Math.floor(w * scale);
+    decodeH = Math.floor(h * scale);
+  }
+
+  // Set ukuran canvas
+  canvas.width  = decodeW;
+  canvas.height = decodeH;
+  ctx.drawImage(video, 0, 0, decodeW, decodeH);
 
   // ── BarcodeDetector (native, tercepat) ──────────────────
   if (_barcodeDetector) {
@@ -64,16 +93,17 @@ async function decodeFrame(canvas, ctx, video) {
   }
 
   // ── jsQR (fallback, kompatibel semua browser) ───────────
-  const imgData = ctx.getImageData(0, 0, w, h);
-  const jsQRLib = await import('jsqr');
-  const jsQR = jsQRLib.default || jsQRLib;
-  const code = jsQR(imgData.data, w, h, {
-    inversionAttempts: 'dontInvert', // lebih cepat
+  const jsQR = jsQRInstance || (await preloadJsQR());
+  if (!jsQR) return null;
+
+  const imgData = ctx.getImageData(0, 0, decodeW, decodeH);
+  const code = jsQR(imgData.data, decodeW, decodeH, {
+    inversionAttempts: 'dontInvert', // Lebih cepat karena tidak mencari QR terbalik
   });
   return code?.data || null;
 }
 
-export function ContinuousScanner({ onScanSuccess, active = true }) {
+export function ContinuousScanner({ onScanSuccess, active = true, paused = false }) {
   const videoRef    = useRef(null);
   const canvasRef   = useRef(null);
   const ctxRef      = useRef(null);
@@ -87,6 +117,12 @@ export function ContinuousScanner({ onScanSuccess, active = true }) {
   const [torch, setTorch]     = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
 
+  // Simpan status paused ke ref agar loop rAF bisa membaca state terbaru tanpa rebuild loop
+  const pausedRef = useRef(paused);
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
+
   // ── Scan loop ──────────────────────────────────────────
   const startScanLoop = useCallback(() => {
     const video  = videoRef.current;
@@ -94,11 +130,20 @@ export function ContinuousScanner({ onScanSuccess, active = true }) {
     if (!video || !canvas || !ctxRef.current) return;
 
     let lastFrameTime = 0;
-    const TARGET_FPS  = 15; // 15fps — cukup cepat, hemat baterai
+    // 30 FPS untuk native detector (sangat cepat), 20 FPS untuk jsQR fallback (untuk hemat baterai/CPU)
+    const useNative   = !!_barcodeDetector;
+    const TARGET_FPS  = useNative ? 30 : 20;
     const FRAME_MS    = 1000 / TARGET_FPS;
 
     const loop = async (now) => {
       if (!mountedRef.current) return;
+
+      // Jika scanner di-pause (misal: sedang menampilkan toast sukses/error/loading),
+      // kita skip proses komputasi frame & decoding agar hemat baterai & mencegah double-read.
+      if (pausedRef.current) {
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
 
       // Throttle ke TARGET_FPS
       if (now - lastFrameTime >= FRAME_MS) {
@@ -110,8 +155,8 @@ export function ContinuousScanner({ onScanSuccess, active = true }) {
             if (decoded) {
               const last = lastScanRef.current;
               const now2 = Date.now();
-              // Debounce: abaikan QR sama dalam 2 detik
-              if (decoded !== last.text || now2 - last.at > 2000) {
+              // Debounce cerdas: abaikan QR sama dalam 2.5 detik
+              if (decoded !== last.text || now2 - last.at > 2500) {
                 lastScanRef.current = { text: decoded, at: now2 };
                 onScanSuccess?.(decoded);
               }
@@ -152,13 +197,14 @@ export function ContinuousScanner({ onScanSuccess, active = true }) {
       // Hentikan stream lama jika ada
       await killStream();
 
-      // Constraints: prioritas kamera belakang
+      // Constraints: prioritas kamera belakang & autofocus kontinu
       const constraints = {
         video: {
           facingMode: { ideal: 'environment' },
           width:  { ideal: 1280, max: 1920 },
           height: { ideal: 720,  max: 1080 },
           frameRate: { ideal: 30 },
+          focusMode: { ideal: 'continuous' } // Fokus kontinu (jika browser mendukung langsung)
         },
         audio: false,
       };
@@ -172,10 +218,19 @@ export function ContinuousScanner({ onScanSuccess, active = true }) {
         return;
       }
 
-      // Cek torch support
+      // Cek capabilities dan coba set autofocus kontinu
       const videoTrack = stream.getVideoTracks()[0];
       const capabilities = videoTrack?.getCapabilities?.();
       if (capabilities?.torch) setTorchSupported(true);
+
+      // Paksa continuous autofocus lewat track constraints jika didukung
+      if (capabilities?.focusMode?.includes('continuous')) {
+        try {
+          await videoTrack.applyConstraints({
+            advanced: [{ focusMode: 'continuous' }]
+          });
+        } catch (_) {}
+      }
 
       // Pasang stream ke video element
       const video = videoRef.current;

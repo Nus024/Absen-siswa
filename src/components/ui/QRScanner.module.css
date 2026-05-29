@@ -7,62 +7,64 @@
 
 .frame {
   position: relative;
-  width: min(320px, 80vw);
+  width: min(480px, 92vw);
   aspect-ratio: 1;
   background: var(--color-neutral-900);
-  border-radius: var(--radius-2xl);
+  border-radius: var(--radius-3xl);
   overflow: hidden;
-  box-shadow: var(--shadow-xl);
-  transition: box-shadow var(--transition-base);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .frame.scanning {
-  box-shadow: 0 0 0 3px var(--color-primary-400), var(--shadow-xl);
+  box-shadow: 0 0 0 4px var(--color-primary-400), 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 .frame.success {
-  box-shadow: 0 0 0 3px var(--color-success), var(--shadow-xl);
+  box-shadow: 0 0 0 4px var(--color-success), 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 .frame.error {
-  box-shadow: 0 0 0 3px var(--color-danger), var(--shadow-xl);
+  box-shadow: 0 0 0 4px var(--color-danger), 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 
 .corner {
   position: absolute;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-color: var(--color-primary-400);
   border-style: solid;
   z-index: 2;
+  transition: all 0.25s ease-in-out;
 }
 
-.tl { top: 16px; left: 16px;  border-width: 3px 0 0 3px; border-radius: 6px 0 0 0; }
-.tr { top: 16px; right: 16px; border-width: 3px 3px 0 0; border-radius: 0 6px 0 0; }
-.bl { bottom: 16px; left: 16px;  border-width: 0 0 3px 3px; border-radius: 0 0 0 6px; }
-.br { bottom: 16px; right: 16px; border-width: 0 3px 3px 0; border-radius: 0 0 6px 0; }
+.tl { top: 20px; left: 20px;  border-width: 4px 0 0 4px; border-radius: 8px 0 0 0; }
+.tr { top: 20px; right: 20px; border-width: 4px 4px 0 0; border-radius: 0 8px 0 0; }
+.bl { bottom: 20px; left: 20px;  border-width: 0 0 4px 4px; border-radius: 0 0 0 8px; }
+.br { bottom: 20px; right: 20px; border-width: 0 4px 4px 0; border-radius: 0 0 8px 0; }
 
 .scanLine {
   position: absolute;
-  left: 12px;
-  right: 12px;
-  height: 2px;
+  left: 20px;
+  right: 20px;
+  height: 3px;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    var(--color-primary-400) 40%,
-    var(--color-primary-300) 50%,
-    var(--color-primary-400) 60%,
+    var(--color-primary-400) 30%,
+    #ffffff 50%,
+    var(--color-primary-400) 70%,
     transparent 100%
   );
   border-radius: var(--radius-full);
-  animation: scanMove 2s ease-in-out infinite;
-  box-shadow: 0 0 8px var(--color-primary-400);
+  animation: scanMove 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  box-shadow: 0 0 15px var(--color-primary-400), 0 0 5px #ffffff;
   z-index: 3;
 }
 
 @keyframes scanMove {
-  0%   { top: 20%; }
-  50%  { top: 75%; }
-  100% { top: 20%; }
+  0%   { top: 15%; opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 85%; opacity: 0; }
 }
 
 .overlay {

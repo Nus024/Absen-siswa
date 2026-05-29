@@ -259,7 +259,11 @@ export function ScannerPage({ user }) {
           message={toast ? `${toast.title} — ${toast.sub}` : 'Arahkan ke QR Code siswa'}
         >
           <div style={{ position: 'absolute', inset: 0 }}>
-            <ContinuousScanner onScanSuccess={handleScan} active />
+            <ContinuousScanner 
+              onScanSuccess={handleScan} 
+              active 
+              paused={isProcessing || scanStatus !== 'scanning'}
+            />
           </div>
         </QRScanner>
       </div>
