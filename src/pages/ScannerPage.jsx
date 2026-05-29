@@ -7,9 +7,10 @@ import { siswaService }  from '../lib/db/siswa';
 import { absensiService } from '../lib/db/absensi';
 import { sesiService }   from '../lib/db/sesi';
 import { izinService }   from '../lib/db/izin';
-import { parseQR, todayStr, SCAN_MODES } from '../lib/constants';
+import { todayStr, SCAN_MODES } from '../lib/constants';
 import { Wifi, WifiOff } from 'lucide-react';
 import { audioService } from '../lib/audioService';
+import { ScannerFeedbackOverlay } from '../features/scanner/ScannerFeedbackOverlay';
 
 // Base Warning & App Error Classes for sound-routing taxonomy
 class WarningError extends Error {
@@ -95,12 +96,17 @@ function getActiveSesi(sesis) {
 export function ScannerPage({ user }) {
   const [mode, setMode]           = useState('absensi');
   const [sesis, setSesis]         = useState([]);
-  const [toast, setToast]         = useState(null);
-  const [scanStatus, setScanStatus] = useState('scanning');
   const [isOnline, setIsOnline]   = useState(navigator.onLine);
   const [isProcessing, setIsProcessing] = useState(false);
-  const toastTimerRef = useRef(null);
-  const processingRef = useRef(false); // guard against concurrent scans
+  // Dedicated scanner feedback state (replaces old toast + scanStatus)
+  const [scanFeedback, setScanFeedback] = useState({
+    visible: false,
+    type: 'success',     // 'success' | 'warning' | 'error'
+    title: '',
+    subtitle: '',
+  });
+  const feedbackTimerRef = useRef(null);
+  const processingRef    = useRef(false); // guard against concurrent scans
 
   useEffect(() => {
     const up   = () => setIsOnline(true);
@@ -119,16 +125,21 @@ export function ScannerPage({ user }) {
       .catch(err => console.error('Gagal load sesi:', err));
   }, []);
 
-  const showToast = useCallback((payload) => {
-    clearTimeout(toastTimerRef.current);
-    setToast(payload);
-    setScanStatus(payload.type);
-    toastTimerRef.current = setTimeout(() => {
-      setToast(null);
-      setScanStatus('scanning');
+  /**
+   * Show the scanner feedback overlay for a given duration then auto-dismiss.
+   * @param {'success'|'warning'|'error'} type
+   * @param {string} title
+   * @param {string} subtitle
+   * @param {number} duration  ms before auto-dismiss
+   */
+  const showFeedback = useCallback((type, title, subtitle, duration) => {
+    clearTimeout(feedbackTimerRef.current);
+    setScanFeedback({ visible: true, type, title, subtitle });
+    feedbackTimerRef.current = setTimeout(() => {
+      setScanFeedback(prev => ({ ...prev, visible: false }));
       processingRef.current = false;
       setIsProcessing(false);
-    }, 2400);
+    }, duration);
   }, []);
 
   const handleScan = useCallback(async (rawText) => {
@@ -147,34 +158,13 @@ export function ScannerPage({ user }) {
     if (!isValidFormat) {
       vibrate([40, 80, 40]);
       audioService.playError();
-      showToast({ 
-        type: 'error', 
-        title: 'QR Tidak Valid', 
-        sub: 'Format QR tidak dikenali' 
-      });
+      showFeedback('error', 'QR Tidak Valid', 'Format QR tidak dikenali', 1000);
       return;
     }
 
     // 2. Optimistic Instant Feedback (<100 ms)
     vibrate(60);
-    audioService.playDetected();
-
-    // Dapatkan nama optimis jika tersedia (format legacy NIS::NAMA)
-    let optimisticName = 'Siswa Terdeteksi';
-    if (isLegacy) {
-      const parts = rawText.split('::');
-      if (parts.length > 1 && parts[1]) optimisticName = parts[1].trim();
-    } else {
-      optimisticName = 'Membaca Kartu...';
-    }
-
-    // Tampilkan indikator sukses instan (green checkmark & overlay)
-    setScanStatus('success');
-    setToast({ 
-      type: 'success', 
-      title: optimisticName, 
-      sub: 'Menyimpan absensi...' 
-    });
+    audioService.playDetected(); // only audible if enableDetectedSound = true
 
     // 3. Jalankan Supabase transaksi di background (tidak di-await di main UI thread)
     (async () => {
@@ -245,12 +235,10 @@ export function ScannerPage({ user }) {
           // Update last_scan_at
           siswaService.updateLastScan(siswa.id).catch(() => {});
 
-          // Perbarui toast dengan data lengkap siswa setelah sukses database
-          setToast({ 
-            type: 'success', 
-            title: siswa.nama, 
-            sub: `${kelasNama} · ${activeSesiObj.nama} (Sukses)` 
-          });
+          // Tampilkan feedback sukses dengan nama lengkap siswa
+          audioService.playSuccess();
+          showFeedback('success', siswa.nama, kelasNama, 1500);
+          return; // early return — cleanup handled by showFeedback timer
 
         } else if (mode === 'izin_keluar') {
           const aktifList = await izinService.getAktif();
@@ -260,12 +248,9 @@ export function ScannerPage({ user }) {
           }
 
           await izinService.create({ siswa_id: siswa.id, petugas_id: user?.id ?? null });
-          
-          setToast({ 
-            type: 'success', 
-            title: siswa.nama, 
-            sub: `${kelasNama} · Izin keluar tercatat` 
-          });
+          audioService.playSuccess();
+          showFeedback('success', siswa.nama, `${kelasNama} · Izin keluar tercatat`, 1500);
+          return;
 
         } else if (mode === 'kembali') {
           const aktifList = await izinService.getAktif();
@@ -275,55 +260,28 @@ export function ScannerPage({ user }) {
           }
 
           await izinService.kembali(aktif.id);
-          
-          setToast({ 
-            type: 'success', 
-            title: siswa.nama, 
-            sub: `${kelasNama} · Kembali ke kelas` 
-          });
+          audioService.playSuccess();
+          showFeedback('success', siswa.nama, `${kelasNama} · Kembali ke kelas`, 1500);
+          return;
         }
 
-        // Suara sukses diputar HANYA setelah seluruh transaksi database berhasil disimpan
-        audioService.playSuccess();
-
-        // Selesaikan pemrosesan dan aktifkan scanner kembali dengan cepat
-        clearTimeout(toastTimerRef.current);
-        toastTimerRef.current = setTimeout(() => {
-          setToast(null);
-          setScanStatus('scanning');
-          processingRef.current = false;
-          setIsProcessing(false);
-        }, 1200); // 1.2 detik durasi konfirmasi sukses sebelum scan berikutnya
+        // Fallback: jika mode tidak cocok, lepas lock saja
+        processingRef.current = false;
+        setIsProcessing(false);
 
       } catch (err) {
         console.error('Proses latar belakang gagal:', err);
-        // Mainkan suara error atau warning jika proses database bermasalah
         vibrate([40, 80, 40]);
         if (err instanceof WarningError) {
           audioService.playWarning();
+          showFeedback('warning', 'Sudah Tercatat', err?.message || 'Duplikat scan', 1200);
         } else {
           audioService.playError();
+          showFeedback('error', 'Absensi Gagal', err?.message || 'Periksa koneksi internet', 1000);
         }
-
-        // Ubah visual ke status error
-        setScanStatus('error');
-        setToast({ 
-          type: 'error', 
-          title: 'Gagal Menyimpan', 
-          sub: err?.message || 'Periksa koneksi internet' 
-        });
-
-        // Durasi agar user dapat membaca error sebelum aktif kembali
-        clearTimeout(toastTimerRef.current);
-        toastTimerRef.current = setTimeout(() => {
-          setToast(null);
-          setScanStatus('scanning');
-          processingRef.current = false;
-          setIsProcessing(false);
-        }, 2200);
       }
     })();
-  }, [mode, sesis, user, showToast]);
+  }, [mode, sesis, user, showFeedback]);
 
   const currentMode   = SCAN_MODES?.find(m => m.id === mode) || { label: mode };
   const activeSesiObj = getActiveSesi(sesis);
@@ -350,16 +308,25 @@ export function ScannerPage({ user }) {
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <QRScanner
-          status={isProcessing ? 'loading' : scanStatus}
-          message={toast ? `${toast.title} — ${toast.sub}` : 'Arahkan ke QR Code siswa'}
+          status={isProcessing ? 'loading' : 'scanning'}
+          message={scanFeedback.visible ? '' : 'Arahkan ke QR Code siswa'}
         >
-          <div style={{ position: 'absolute', inset: 0 }}>
-            <ContinuousScanner 
-              onScanSuccess={handleScan} 
-              active 
-              paused={isProcessing || scanStatus !== 'scanning'}
+          {/* Scanner — always mounted, never restarts */}
+          <div style={{ position: 'absolute', inset: 0, opacity: scanFeedback.visible ? 0.35 : 1, transition: 'opacity 180ms ease' }}>
+            <ContinuousScanner
+              onScanSuccess={handleScan}
+              active
+              paused={isProcessing}
             />
           </div>
+
+          {/* Feedback overlay — purely presentational */}
+          <ScannerFeedbackOverlay
+            visible={scanFeedback.visible}
+            type={scanFeedback.type}
+            title={scanFeedback.title}
+            subtitle={scanFeedback.subtitle}
+          />
         </QRScanner>
       </div>
 
