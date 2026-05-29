@@ -179,9 +179,44 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
     rafRef.current = requestAnimationFrame(loop);
   }, []);
 
+  // Helper to cleanly stop any active stream (singleton and component-level)
+  const stopActiveStream = useCallback(() => {
+    console.log(
+      '[STOP STREAM]',
+      {
+        streamExists: !!streamRef.current,
+        globalStreamExists: !!_globalStream,
+      }
+    );
+    let stopped = false;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+      stopped = true;
+    }
+    if (_globalStream) {
+      _globalStream.getTracks().forEach(t => t.stop());
+      _globalStream = null;
+      stopped = true;
+    }
+    if (stopped) {
+      console.log('[Camera] Camera Stopped');
+    }
+  }, []);
+
   // ── Start camera ───────────────────────────────────────
   const startCamera = useCallback(async () => {
     if (!mountedRef.current) return;
+    console.log(
+      '[CAMERA START]',
+      {
+        timestamp: Date.now(),
+        status,
+        mounted: mountedRef.current,
+        streamExists: !!streamRef.current,
+        globalStreamExists: !!_globalStream,
+      }
+    );
     setStatus('requesting');
     setErrMsg('');
 
@@ -199,9 +234,14 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
       return;
     }
 
+    const isRestarting = !!(_globalStream || streamRef.current);
+    if (isRestarting) {
+      console.log('[Camera] Camera Restarted');
+    }
+
     try {
       // Hentikan stream lama jika ada
-      await killStream();
+      stopActiveStream();
 
       // Constraints: prioritas kamera belakang & autofocus kontinu
       const constraints = {
@@ -215,12 +255,38 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
         audio: false,
       };
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err) {
+        console.error('[CAMERA CATCH] getUserMedia Failed:', err);
+        throw err;
+      }
+      
+      console.log(
+        '[GET USER MEDIA SUCCESS]',
+        {
+          tracks: stream.getTracks().length,
+          active: stream.active,
+          readyState: stream.getVideoTracks()?.[0]?.readyState,
+        }
+      );
+
       _globalStream = stream;
       streamRef.current = stream;
 
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        track.onended = (event) => {
+          console.error('[TRACK ONENDED]', event);
+        };
+      }
+      stream.oninactive = (event) => {
+        console.error('[STREAM ONINACTIVE]', event);
+      };
+
       if (!mountedRef.current) {
-        killStream();
+        stopActiveStream();
         return;
       }
 
@@ -243,25 +309,74 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
       if (!video) return;
       video.srcObject = stream;
 
+      video.onpause = (event) => {
+        console.error('[VIDEO ONPAUSE]', event);
+      };
+      video.onabort = (event) => {
+        console.error('[VIDEO ONABORT]', event);
+      };
+      video.onstalled = (event) => {
+        console.error('[VIDEO ONSTALLED]', event);
+      };
+
       setStatus('loading');
 
       await new Promise((resolve, reject) => {
-        video.onloadedmetadata = () => {
-          video.play()
-            .then(resolve)
-            .catch(reject);
+        const timeoutId = setTimeout(() => {
+          console.error('[CAMERA TIMEOUT]');
+          reject(new Error('CAMERA_TIMEOUT'));
+        }, 8000);
+
+        const handleResolve = (val) => {
+          clearTimeout(timeoutId);
+          resolve(val);
         };
-        video.onerror = reject;
-        // Timeout safety
-        setTimeout(reject, 8000);
+        const handleReject = (err) => {
+          clearTimeout(timeoutId);
+          reject(err);
+        };
+
+        video.onloadedmetadata = () => {
+          console.log('[VIDEO PLAY START]');
+          video.play()
+            .then(() => {
+              console.log('[VIDEO PLAY SUCCESS]');
+              handleResolve();
+            })
+            .catch((err) => {
+              handleReject(err);
+            });
+        };
+        video.onerror = (event) => {
+          console.error('[VIDEO ONERROR]', event);
+          handleReject(event);
+        };
       });
 
       if (!mountedRef.current) return;
       setStatus('active');
+      console.log('[Camera] Camera Started');
       startScanLoop();
 
     } catch (err) {
       if (!mountedRef.current) return;
+
+      console.error(
+        '[CAMERA CATCH]',
+        {
+          error: err,
+          name: err?.name,
+          message: err?.message,
+          stack: err?.stack,
+          status,
+          mounted: mountedRef.current,
+          streamExists: !!streamRef.current,
+          globalStreamExists: !!_globalStream,
+          videoReadyState: videoRef.current?.readyState,
+          videoWidth: videoRef.current?.videoWidth,
+          videoHeight: videoRef.current?.videoHeight,
+        }
+      );
 
       const name = err?.name || '';
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
@@ -272,24 +387,41 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
         setErrMsg('Kamera tidak ditemukan di perangkat ini.');
       } else if (name === 'NotReadableError') {
         setStatus('error');
-        setErrMsg('Kamera sedang digunakan oleh aplikasi lain. Tutup aplikasi tersebut lalu coba lagi.');
+        setErrMsg('Kamera sedang digunakan oleh aplikasi lain atau terjadi masalah pada hardware kamera. Tutup aplikasi lain lalu coba lagi.');
+      } else if (name === 'AbortError') {
+        setStatus('error');
+        setErrMsg('Permintaan akses kamera dibatalkan oleh browser atau sistem operasi.');
+      } else if (name === 'SecurityError') {
+        setStatus('error');
+        setErrMsg('Akses kamera ditolak karena masalah keamanan atau kebijakan asal browser.');
       } else if (name === 'OverconstrainedError') {
+        console.log('[Camera] Camera Restarted (retrying with loose constraints)');
         // Retry dengan constraints lebih longgar
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' },
-            audio: false,
-          });
-          _globalStream = stream;
-          streamRef.current = stream;
+          stopActiveStream();
+          let retryStream;
+          try {
+            retryStream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: 'environment' },
+              audio: false,
+            });
+          } catch (retryErr) {
+            console.error('[Camera] getUserMedia Failed during retry:', retryErr);
+            throw retryErr;
+          }
+          
+          _globalStream = retryStream;
+          streamRef.current = retryStream;
           const video = videoRef.current;
           if (video && mountedRef.current) {
-            video.srcObject = stream;
+            video.srcObject = retryStream;
             await video.play();
             setStatus('active');
+            console.log('[Camera] Camera Started');
             startScanLoop();
           }
-        } catch (_) {
+        } catch (retryErr) {
+          console.error('[Camera] Gagal mengakses kamera saat retry. Detail error browser asli:', retryErr);
           setStatus('error');
           setErrMsg('Kamera tidak dapat diinisialisasi. Coba muat ulang halaman.');
         }
@@ -298,10 +430,11 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
         setErrMsg('Gagal mengakses kamera. Silakan coba lagi atau muat ulang halaman.');
       }
     }
-  }, [startScanLoop]);
+  }, [startScanLoop, stopActiveStream]);
 
   // ── Stop & cleanup ─────────────────────────────────────
   const stopScanner = useCallback(() => {
+    console.log('[STOP SCANNER]');
     cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
     const video = videoRef.current;
@@ -309,12 +442,8 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
       video.pause();
       video.srcObject = null;
     }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    _globalStream = null;
-  }, []);
+    stopActiveStream();
+  }, [stopActiveStream]);
 
   // ── Toggle torch (flashlight) ──────────────────────────
   const toggleTorch = useCallback(async () => {
@@ -358,7 +487,7 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
       cancelAnimationFrame(rafRef.current);
       stopScanner();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, startCamera, stopScanner]);
 
   // ── Pause/resume saat `active` prop berubah ────────────
   useEffect(() => {
@@ -369,7 +498,35 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
       stopScanner();
       setStatus('paused');
     }
-  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, status, startCamera, stopScanner]);
+
+  // ── Watchdog 5 Detik saat status active ────────────────
+  useEffect(() => {
+    let intervalId = null;
+    if (status === 'active') {
+      intervalId = setInterval(() => {
+        console.log(
+          '[WATCHDOG]',
+          {
+            status,
+            streamActive: streamRef.current?.active,
+            trackReadyState:
+              streamRef.current
+                ?.getVideoTracks?.()[0]
+                ?.readyState,
+            videoReadyState: videoRef.current?.readyState,
+            videoWidth: videoRef.current?.videoWidth,
+            videoHeight: videoRef.current?.videoHeight,
+          }
+        );
+      }, 5000);
+    }
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [status]);
 
   // ── Render ─────────────────────────────────────────────
   return (

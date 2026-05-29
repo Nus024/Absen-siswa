@@ -1,19 +1,34 @@
 // ============================================================
 // App.jsx — root dengan layout shell premium + Supabase auth
 // ============================================================
-import { Component, lazy, Suspense } from 'react';
+import { Component, lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import Layout from './components/ui/Layout';
 import { ThemeProvider } from './hooks/useTheme';
 
-const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
-const ScannerPage = lazy(() => import('./pages/ScannerPage').then(m => ({ default: m.ScannerPage })));
-const RekapHarianPage = lazy(() => import('./pages/RekapHarianPage').then(m => ({ default: m.RekapHarianPage })));
-const RekapBulananPage = lazy(() => import('./pages/RekapBulananPage').then(m => ({ default: m.RekapBulananPage })));
-const IzinKeluarPage = lazy(() => import('./pages/IzinKeluarPage').then(m => ({ default: m.IzinKeluarPage })));
-const AdminPage = lazy(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })));
-const QRManagementPage = lazy(() => import('./pages/QRManagementPage').then(m => ({ default: m.QRManagementPage })));
+// Helper to auto-retry dynamic import if it fails (common when new version is deployed and old chunks are deleted)
+const lazyWithRetry = (componentImport) => {
+  return lazy(() =>
+    componentImport().catch((error) => {
+      const pageHasAlreadyBeenReloaded = window.sessionStorage.getItem('page-has-been-reloaded');
+      if (!pageHasAlreadyBeenReloaded) {
+        window.sessionStorage.setItem('page-has-been-reloaded', 'true');
+        window.location.reload();
+        return new Promise(() => {}); // Keep in Suspense fallback state while reloading
+      }
+      throw error;
+    })
+  );
+};
+
+const LoginPage = lazyWithRetry(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
+const ScannerPage = lazyWithRetry(() => import('./pages/ScannerPage').then(m => ({ default: m.ScannerPage })));
+const RekapHarianPage = lazyWithRetry(() => import('./pages/RekapHarianPage').then(m => ({ default: m.RekapHarianPage })));
+const RekapBulananPage = lazyWithRetry(() => import('./pages/RekapBulananPage').then(m => ({ default: m.RekapBulananPage })));
+const IzinKeluarPage = lazyWithRetry(() => import('./pages/IzinKeluarPage').then(m => ({ default: m.IzinKeluarPage })));
+const AdminPage = lazyWithRetry(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })));
+const QRManagementPage = lazyWithRetry(() => import('./pages/QRManagementPage').then(m => ({ default: m.QRManagementPage })));
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -60,6 +75,11 @@ class ErrorBoundary extends Component {
 
 export default function App() {
   const { user, login, logout } = useAuth();
+
+  useEffect(() => {
+    // Hapus status reload ketika aplikasi berhasil dimuat dengan sukses
+    window.sessionStorage.removeItem('page-has-been-reloaded');
+  }, []);
 
   return (
     <ThemeProvider>

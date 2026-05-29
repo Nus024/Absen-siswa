@@ -9,6 +9,57 @@ import { sesiService }   from '../lib/db/sesi';
 import { izinService }   from '../lib/db/izin';
 import { parseQR, todayStr, SCAN_MODES } from '../lib/constants';
 import { Wifi, WifiOff } from 'lucide-react';
+import { audioService } from '../lib/audioService';
+
+// Base Warning & App Error Classes for sound-routing taxonomy
+class WarningError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'WarningError';
+  }
+}
+
+class AppError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
+
+class DuplicateScanError extends WarningError {
+  constructor(message) {
+    super(message);
+    this.name = 'DuplicateScanError';
+  }
+}
+
+class InvalidQrError extends AppError {
+  constructor(message) {
+    super(message);
+    this.name = 'InvalidQrError';
+  }
+}
+
+class InactiveQrError extends AppError {
+  constructor(message) {
+    super(message);
+    this.name = 'InactiveQrError';
+  }
+}
+
+class SessionNotFoundError extends AppError {
+  constructor(message) {
+    super(message);
+    this.name = 'SessionNotFoundError';
+  }
+}
+
+class AccessDeniedError extends AppError {
+  constructor(message) {
+    super(message);
+    this.name = 'AccessDeniedError';
+  }
+}
 import QRScanner from '../components/ui/QRScanner';
 import Button from '../components/ui/Button';
 
@@ -21,29 +72,7 @@ function isDuplicate(key) {
   return t && Date.now() - t < CACHE_TTL;
 }
 
-let _audioCtx = null;
-function beep(type = 'success') {
-  try {
-    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = _audioCtx.createOscillator();
-    const g = _audioCtx.createGain();
-    o.connect(g);
-    g.connect(_audioCtx.destination);
-    if (type === 'success') {
-      o.frequency.setValueAtTime(880, _audioCtx.currentTime);
-      g.gain.setValueAtTime(0.18, _audioCtx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + 0.12);
-      o.start(_audioCtx.currentTime);
-      o.stop(_audioCtx.currentTime + 0.12);
-    } else {
-      o.frequency.setValueAtTime(330, _audioCtx.currentTime);
-      g.gain.setValueAtTime(0.1, _audioCtx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + 0.18);
-      o.start(_audioCtx.currentTime);
-      o.stop(_audioCtx.currentTime + 0.18);
-    }
-  } catch (_) {}
-}
+// beep() logic has been moved to lib/audioService.js
 
 function vibrate(pattern) {
   try { navigator.vibrate?.(pattern); } catch (_) {}
@@ -117,7 +146,7 @@ export function ScannerPage({ user }) {
     const isValidFormat = rawText && (isUuid || isSiswaUuid || isLegacy);
     if (!isValidFormat) {
       vibrate([40, 80, 40]);
-      beep('error');
+      audioService.playError();
       showToast({ 
         type: 'error', 
         title: 'QR Tidak Valid', 
@@ -128,7 +157,7 @@ export function ScannerPage({ user }) {
 
     // 2. Optimistic Instant Feedback (<100 ms)
     vibrate(60);
-    beep('success');
+    audioService.playDetected();
 
     // Dapatkan nama optimis jika tersedia (format legacy NIS::NAMA)
     let optimisticName = 'Siswa Terdeteksi';
@@ -159,7 +188,7 @@ export function ScannerPage({ user }) {
           token = rawText.trim(); // Token legacy (NIS::NAMA)
         }
 
-        if (!token) throw new Error('Token kosong');
+        if (!token) throw new InvalidQrError('Token kosong');
 
         // Cari siswa berdasarkan token (UUID) atau NIS
         let siswa = null;
@@ -171,7 +200,7 @@ export function ScannerPage({ user }) {
         }
 
         if (!siswa || siswa.qr_status !== 'active') {
-          throw new Error('QR tidak aktif atau sudah di-reset');
+          throw new InactiveQrError('QR tidak aktif atau sudah di-reset');
         }
 
         const kelasNama = siswa.kelas?.nama || '—';
@@ -181,26 +210,26 @@ export function ScannerPage({ user }) {
         if (user?.role === 'pengawas' && user?.tingkat_akses?.length > 0) {
           const tingkatSiswa = kelasNama.split(' ')[0];
           if (!user.tingkat_akses.includes(tingkatSiswa)) {
-            throw new Error(`Tidak diizinkan absen kelas ${tingkatSiswa}`);
+            throw new AccessDeniedError(`Tidak diizinkan absen kelas ${tingkatSiswa}`);
           }
         }
 
         if (mode === 'absensi') {
           const activeSesiObj = getActiveSesi(sesis);
           if (!activeSesiObj) {
-            throw new Error('Sesi aktif belum dikonfigurasi');
+            throw new SessionNotFoundError('Sesi aktif belum dikonfigurasi');
           }
 
           const key = `${siswa.id}_${activeSesiObj.id}_${tanggal}`;
           if (isDuplicate(key)) {
-            throw new Error('Sudah tercatat (cache)');
+            throw new DuplicateScanError('Sudah tercatat (cache)');
           }
 
           // Cek duplikat di database
           const alreadyScanned = await absensiService.existsScan(siswa.id, activeSesiObj.id, tanggal);
           if (alreadyScanned) {
             scanCache.set(key, Date.now());
-            throw new Error('Sudah tercatat hari ini');
+            throw new DuplicateScanError('Sudah tercatat hari ini');
           }
 
           scanCache.set(key, Date.now());
@@ -227,7 +256,7 @@ export function ScannerPage({ user }) {
           const aktifList = await izinService.getAktif();
           const sudahIzin = aktifList.find(i => i.siswa_id === siswa.id);
           if (sudahIzin) {
-            throw new Error('Sudah dalam izin keluar');
+            throw new DuplicateScanError('Sudah dalam izin keluar');
           }
 
           await izinService.create({ siswa_id: siswa.id, petugas_id: user?.id ?? null });
@@ -242,7 +271,7 @@ export function ScannerPage({ user }) {
           const aktifList = await izinService.getAktif();
           const aktif = aktifList.find(i => i.siswa_id === siswa.id);
           if (!aktif) {
-            throw new Error('Tidak ada izin keluar aktif');
+            throw new DuplicateScanError('Tidak ada izin keluar aktif');
           }
 
           await izinService.kembali(aktif.id);
@@ -253,6 +282,9 @@ export function ScannerPage({ user }) {
             sub: `${kelasNama} · Kembali ke kelas` 
           });
         }
+
+        // Suara sukses diputar HANYA setelah seluruh transaksi database berhasil disimpan
+        audioService.playSuccess();
 
         // Selesaikan pemrosesan dan aktifkan scanner kembali dengan cepat
         clearTimeout(toastTimerRef.current);
@@ -265,9 +297,13 @@ export function ScannerPage({ user }) {
 
       } catch (err) {
         console.error('Proses latar belakang gagal:', err);
-        // Mainkan suara error jika proses database bermasalah
+        // Mainkan suara error atau warning jika proses database bermasalah
         vibrate([40, 80, 40]);
-        beep('error');
+        if (err instanceof WarningError) {
+          audioService.playWarning();
+        } else {
+          audioService.playError();
+        }
 
         // Ubah visual ke status error
         setScanStatus('error');
