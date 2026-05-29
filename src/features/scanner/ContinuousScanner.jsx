@@ -8,7 +8,6 @@
 // ============================================================
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import jsQR from 'jsqr';
 import { Camera, CameraOff, RefreshCw, Zap } from 'lucide-react';
 
 /* ── Scanner states ─────────────────────────────────────────
@@ -66,6 +65,8 @@ async function decodeFrame(canvas, ctx, video) {
 
   // ── jsQR (fallback, kompatibel semua browser) ───────────
   const imgData = ctx.getImageData(0, 0, w, h);
+  const jsQRLib = await import('jsqr');
+  const jsQR = jsQRLib.default || jsQRLib;
   const code = jsQR(imgData.data, w, h, {
     inversionAttempts: 'dontInvert', // lebih cepat
   });

@@ -1,4 +1,3 @@
-import { ktsTemplateBase64 } from './kts_base64_string';
 
 export function drawKtsCard(canvas, { nis, nama, kelasNama, qrToken }, callback) {
   const ctx = canvas.getContext('2d');
@@ -46,5 +45,5 @@ export function drawKtsCard(canvas, { nis, nama, kelasNama, qrToken }, callback)
       if (callback) callback();
     });
   };
-  img.src = ktsTemplateBase64;
+  img.src = '/template_kartu.jpg';
 }

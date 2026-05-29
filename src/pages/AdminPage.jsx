@@ -1,12 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import QRCode from 'qrcode';
-import JSZip from 'jszip';
 import { siswaDB, kelasDB, sesiDB, usersDB } from '../lib/db/index';
 
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useTheme } from '../hooks/useTheme';
-import * as XLSX from 'xlsx';
 import { LogOut, Upload, Download, Users, BookOpen, Clock, UserCog, ChevronRight, ArrowLeft, Paintbrush, KeyRound, AlertTriangle, QrCode, Pencil, Trash2, Settings } from 'lucide-react';
 import Header from '../components/ui/Header';
 import Card from '../components/ui/Card';
@@ -533,17 +530,25 @@ function ManageSiswa({ canAdmin }) {
     });
   }
 
-  function downloadTemplate() {
-    const ws = XLSX.utils.json_to_sheet([{ NIS: '1001', Nama: 'Budi Santoso' }]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Siswa');
-    XLSX.writeFile(wb, 'Template_Data_Siswa.xlsx');
+  async function downloadTemplate() {
+    try {
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.json_to_sheet([{ NIS: '1001', Nama: 'Budi Santoso' }]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Siswa');
+      XLSX.writeFile(wb, 'Template_Data_Siswa.xlsx');
+    } catch (e) {
+      console.error(e);
+      alert('Gagal mendownload template.');
+    }
   }
 
   async function downloadSemuaQR() {
     if (filtered.length === 0) { alert('Tidak ada siswa untuk di-generate QR.'); return; }
     setBulkLoading(true);
     try {
+      const JSZipLib = await import('jszip');
+      const JSZip = JSZipLib.default || JSZipLib;
       const zip = new JSZip();
       const { drawKtsCard } = await import('../features/qr/ktsDraw');
       const tempCanvas = document.createElement('canvas');
@@ -598,6 +603,7 @@ function ManageSiswa({ canAdmin }) {
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
+        const XLSX = await import('xlsx');
         const wb = XLSX.read(evt.target.result, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws);

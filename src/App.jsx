@@ -1,18 +1,19 @@
 // ============================================================
 // App.jsx — root dengan layout shell premium + Supabase auth
 // ============================================================
-import { Component } from 'react';
+import { Component, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import Layout from './components/ui/Layout';
-import { LoginPage } from './pages/LoginPage';
-import { ScannerPage } from './pages/ScannerPage';
-import { RekapHarianPage } from './pages/RekapHarianPage';
-import { RekapBulananPage } from './pages/RekapBulananPage';
-import { IzinKeluarPage } from './pages/IzinKeluarPage';
-import { AdminPage } from './pages/AdminPage';
-import { QRManagementPage } from './pages/QRManagementPage';
 import { ThemeProvider } from './hooks/useTheme';
+
+const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
+const ScannerPage = lazy(() => import('./pages/ScannerPage').then(m => ({ default: m.ScannerPage })));
+const RekapHarianPage = lazy(() => import('./pages/RekapHarianPage').then(m => ({ default: m.RekapHarianPage })));
+const RekapBulananPage = lazy(() => import('./pages/RekapBulananPage').then(m => ({ default: m.RekapBulananPage })));
+const IzinKeluarPage = lazy(() => import('./pages/IzinKeluarPage').then(m => ({ default: m.IzinKeluarPage })));
+const AdminPage = lazy(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })));
+const QRManagementPage = lazy(() => import('./pages/QRManagementPage').then(m => ({ default: m.QRManagementPage })));
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -64,23 +65,27 @@ export default function App() {
     <ThemeProvider>
       {!user ? (
         <ErrorBoundary>
-          <LoginPage onLogin={login} />
+          <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}><span className="spinner" /></div>}>
+            <LoginPage onLogin={login} />
+          </Suspense>
         </ErrorBoundary>
       ) : (
         <ErrorBoundary>
           <BrowserRouter>
             <Layout user={user} onLogout={logout}>
-              <Routes>
-                <Route path="/"             element={<Navigate to="/scanner" replace />} />
-                <Route path="/login"        element={<Navigate to="/scanner" replace />} />
-                <Route path="/scanner"      element={<ScannerPage user={user} />} />
-                <Route path="/rekap-harian" element={<RekapHarianPage user={user} />} />
-                <Route path="/rekap-bulanan" element={<RekapBulananPage user={user} />} />
-                <Route path="/izin-keluar"  element={<IzinKeluarPage user={user} />} />
-                <Route path="/qr"           element={<QRManagementPage user={user} />} />
-                <Route path="/atur"         element={<AdminPage user={user} onLogout={logout} />} />
-                <Route path="*"             element={<Navigate to="/scanner" replace />} />
-              </Routes>
+              <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}><span className="spinner" /></div>}>
+                <Routes>
+                  <Route path="/"             element={<Navigate to="/scanner" replace />} />
+                  <Route path="/login"        element={<Navigate to="/scanner" replace />} />
+                  <Route path="/scanner"      element={<ScannerPage user={user} />} />
+                  <Route path="/rekap-harian" element={<RekapHarianPage user={user} />} />
+                  <Route path="/rekap-bulanan" element={<RekapBulananPage user={user} />} />
+                  <Route path="/izin-keluar"  element={<IzinKeluarPage user={user} />} />
+                  <Route path="/qr"           element={<QRManagementPage user={user} />} />
+                  <Route path="/atur"         element={<AdminPage user={user} onLogout={logout} />} />
+                  <Route path="*"             element={<Navigate to="/scanner" replace />} />
+                </Routes>
+              </Suspense>
             </Layout>
           </BrowserRouter>
         </ErrorBoundary>

@@ -3,4 +3,35 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+              return 'react-vendor';
+            }
+            if (id.includes('@supabase') || id.includes('supabase') || id.includes('websocket') || id.includes('postgrest') || id.includes('functions-js')) {
+              return 'supabase-vendor';
+            }
+            if (id.includes('lucide-react')) {
+              return 'lucide-vendor';
+            }
+            if (id.includes('xlsx')) {
+              return 'excel-vendor';
+            }
+            if (id.includes('jszip')) {
+              return 'zip-vendor';
+            }
+            if (id.includes('jsqr')) {
+              return 'jsqr-vendor';
+            }
+            if (id.includes('qrcode')) {
+              return 'qrcode-vendor';
+            }
+          }
+        }
+      }
+    }
+  }
 })
