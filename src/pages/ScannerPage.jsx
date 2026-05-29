@@ -108,126 +108,178 @@ export function ScannerPage({ user }) {
     processingRef.current = true;
     setIsProcessing(true);
 
-    try {
-      const token = parseQR(rawText);
-      if (!token) {
-        processingRef.current = false;
-        setIsProcessing(false);
-        return;
-      }
+    // 1. Pre-validation QR
+    const isValidFormat = rawText && (rawText.startsWith('SISWA:') || rawText.includes('::'));
+    if (!isValidFormat) {
+      vibrate([40, 80, 40]);
+      beep('error');
+      showToast({ 
+        type: 'error', 
+        title: 'QR Tidak Valid', 
+        sub: 'Format QR tidak dikenali' 
+      });
+      return;
+    }
 
-      // Cari siswa berdasarkan token (UUID) atau NIS (format NIS::NAMA)
-      let siswa = null;
-      if (token.includes('::')) {
-        // Format lama: NIS::NAMA — lookup by NIS
-        const nis = token.split('::')[0];
-        siswa = await siswaService.getByNis(nis);
-      } else {
-        // Format baru: UUID token
-        siswa = await siswaService.getByQrToken(token);
-      }
+    // 2. Optimistic Instant Feedback (<100 ms)
+    vibrate(60);
+    beep('success');
 
-      if (!siswa || siswa.qr_status !== 'active') {
+    // Dapatkan nama optimis jika tersedia (format legacy NIS::NAMA)
+    let optimisticName = 'Siswa Terdeteksi';
+    if (rawText.includes('::')) {
+      const parts = rawText.split('::');
+      if (parts.length > 1 && parts[1]) optimisticName = parts[1].trim();
+    } else {
+      optimisticName = 'Membaca Kartu...';
+    }
+
+    // Tampilkan indikator sukses instan (green checkmark & overlay)
+    setScanStatus('success');
+    setToast({ 
+      type: 'success', 
+      title: optimisticName, 
+      sub: 'Menyimpan absensi...' 
+    });
+
+    // 3. Jalankan Supabase transaksi di background (tidak di-await di main UI thread)
+    (async () => {
+      try {
+        let token = null;
+        if (rawText.startsWith('SISWA:')) {
+          token = rawText.replace('SISWA:', '').trim();
+        } else {
+          token = rawText.trim();
+        }
+
+        if (!token) throw new Error('Token kosong');
+
+        // Cari siswa berdasarkan token (UUID) atau NIS
+        let siswa = null;
+        if (token.includes('::')) {
+          const nis = token.split('::')[0];
+          siswa = await siswaService.getByNis(nis);
+        } else {
+          siswa = await siswaService.getByQrToken(token);
+        }
+
+        if (!siswa || siswa.qr_status !== 'active') {
+          throw new Error('QR tidak aktif atau sudah di-reset');
+        }
+
+        const kelasNama = siswa.kelas?.nama || '—';
+        const tanggal = todayStr();
+
+        // Validasi akses pengawas
+        if (user?.role === 'pengawas' && user?.tingkat_akses?.length > 0) {
+          const tingkatSiswa = kelasNama.split(' ')[0];
+          if (!user.tingkat_akses.includes(tingkatSiswa)) {
+            throw new Error(`Tidak diizinkan absen kelas ${tingkatSiswa}`);
+          }
+        }
+
+        if (mode === 'absensi') {
+          const activeSesiObj = getActiveSesi(sesis);
+          if (!activeSesiObj) {
+            throw new Error('Sesi aktif belum dikonfigurasi');
+          }
+
+          const key = `${siswa.id}_${activeSesiObj.id}_${tanggal}`;
+          if (isDuplicate(key)) {
+            throw new Error('Sudah tercatat (cache)');
+          }
+
+          // Cek duplikat di database
+          const alreadyScanned = await absensiService.existsScan(siswa.id, activeSesiObj.id, tanggal);
+          if (alreadyScanned) {
+            scanCache.set(key, Date.now());
+            throw new Error('Sudah tercatat hari ini');
+          }
+
+          scanCache.set(key, Date.now());
+
+          // Simpan ke Supabase
+          await absensiService.create({
+            siswa_id:   siswa.id,
+            sesi_id:    activeSesiObj.id,
+            tanggal,
+            petugas_id: user?.id ?? null,
+          });
+
+          // Update last_scan_at
+          siswaService.updateLastScan(siswa.id).catch(() => {});
+
+          // Perbarui toast dengan data lengkap siswa setelah sukses database
+          setToast({ 
+            type: 'success', 
+            title: siswa.nama, 
+            sub: `${kelasNama} · ${activeSesiObj.nama} (Sukses)` 
+          });
+
+        } else if (mode === 'izin_keluar') {
+          const aktifList = await izinService.getAktif();
+          const sudahIzin = aktifList.find(i => i.siswa_id === siswa.id);
+          if (sudahIzin) {
+            throw new Error('Sudah dalam izin keluar');
+          }
+
+          await izinService.create({ siswa_id: siswa.id, petugas_id: user?.id ?? null });
+          
+          setToast({ 
+            type: 'success', 
+            title: siswa.nama, 
+            sub: `${kelasNama} · Izin keluar tercatat` 
+          });
+
+        } else if (mode === 'kembali') {
+          const aktifList = await izinService.getAktif();
+          const aktif = aktifList.find(i => i.siswa_id === siswa.id);
+          if (!aktif) {
+            throw new Error('Tidak ada izin keluar aktif');
+          }
+
+          await izinService.kembali(aktif.id);
+          
+          setToast({ 
+            type: 'success', 
+            title: siswa.nama, 
+            sub: `${kelasNama} · Kembali ke kelas` 
+          });
+        }
+
+        // Selesaikan pemrosesan dan aktifkan scanner kembali dengan cepat
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => {
+          setToast(null);
+          setScanStatus('scanning');
+          processingRef.current = false;
+          setIsProcessing(false);
+        }, 1200); // 1.2 detik durasi konfirmasi sukses sebelum scan berikutnya
+
+      } catch (err) {
+        console.error('Proses latar belakang gagal:', err);
+        // Mainkan suara error jika proses database bermasalah
         vibrate([40, 80, 40]);
         beep('error');
-        showToast({ type: 'error', title: 'QR Tidak Dikenali', sub: 'QR tidak valid atau sudah direset' });
-        return;
-      }
 
-      const kelas   = siswa.kelas;
-      const kelasNama = kelas?.nama || '—';
-      const tanggal = todayStr();
-
-      // Validasi akses pengawas
-      if (user?.role === 'pengawas' && user?.tingkat_akses?.length > 0) {
-        const tingkatSiswa = kelasNama.split(' ')[0];
-        if (!user.tingkat_akses.includes(tingkatSiswa)) {
-          vibrate([40, 80, 40]);
-          beep('error');
-          showToast({ type: 'error', title: 'Akses Ditolak', sub: `Tidak diizinkan absen kelas ${tingkatSiswa}` });
-          return;
-        }
-      }
-
-      if (mode === 'absensi') {
-        const activeSesiObj = getActiveSesi(sesis);
-        if (!activeSesiObj) {
-          vibrate([40]);
-          showToast({ type: 'error', title: 'Sesi Belum Diatur', sub: 'Tambahkan sesi di pengaturan' });
-          return;
-        }
-
-        const key = `${siswa.id}_${activeSesiObj.id}_${tanggal}`;
-        if (isDuplicate(key)) {
-          vibrate([40, 60, 40]);
-          beep('error');
-          showToast({ type: 'error', title: siswa.nama, sub: `${kelasNama} · Sudah tercatat (cache)` });
-          return;
-        }
-
-        // Cek duplikat di database
-        const alreadyScanned = await absensiService.existsScan(siswa.id, activeSesiObj.id, tanggal);
-        if (alreadyScanned) {
-          scanCache.set(key, Date.now());
-          vibrate([40, 60, 40]);
-          beep('error');
-          showToast({ type: 'error', title: siswa.nama, sub: `${kelasNama} · Sudah tercatat` });
-          return;
-        }
-
-        scanCache.set(key, Date.now());
-
-        // Simpan ke Supabase
-        await absensiService.create({
-          siswa_id:   siswa.id,
-          sesi_id:    activeSesiObj.id,
-          tanggal,
-          petugas_id: user?.id ?? null,
+        // Ubah visual ke status error
+        setScanStatus('error');
+        setToast({ 
+          type: 'error', 
+          title: 'Gagal Menyimpan', 
+          sub: err?.message || 'Periksa koneksi internet' 
         });
 
-        // Update last_scan_at
-        siswaService.updateLastScan(siswa.id).catch(() => {});
-
-        vibrate(60);
-        beep('success');
-        showToast({ type: 'success', title: siswa.nama, sub: `${kelasNama} · ${activeSesiObj.nama}` });
-
-      } else if (mode === 'izin_keluar') {
-        const aktifList = await izinService.getAktif();
-        const sudahIzin = aktifList.find(i => i.siswa_id === siswa.id);
-        if (sudahIzin) {
-          vibrate([40, 60, 40]);
-          beep('error');
-          showToast({ type: 'error', title: siswa.nama, sub: `${kelasNama} · Sudah dalam izin keluar` });
-          return;
-        }
-
-        await izinService.create({ siswa_id: siswa.id, petugas_id: user?.id ?? null });
-        vibrate(60);
-        beep('success');
-        showToast({ type: 'success', title: siswa.nama, sub: `${kelasNama} · Izin keluar tercatat` });
-
-      } else if (mode === 'kembali') {
-        const aktifList = await izinService.getAktif();
-        const aktif = aktifList.find(i => i.siswa_id === siswa.id);
-        if (!aktif) {
-          vibrate([40, 60, 40]);
-          beep('error');
-          showToast({ type: 'error', title: siswa.nama, sub: `${kelasNama} · Tidak ada izin keluar aktif` });
-          return;
-        }
-
-        await izinService.kembali(aktif.id);
-        vibrate(60);
-        beep('success');
-        showToast({ type: 'success', title: siswa.nama, sub: `${kelasNama} · Kembali ke kelas` });
+        // Durasi agar user dapat membaca error sebelum aktif kembali
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => {
+          setToast(null);
+          setScanStatus('scanning');
+          processingRef.current = false;
+          setIsProcessing(false);
+        }, 2200);
       }
-
-    } catch (err) {
-      console.error('Scan error:', err);
-      beep('error');
-      showToast({ type: 'error', title: 'Gagal Menyimpan', sub: err?.message || 'Periksa koneksi internet' });
-    }
+    })();
   }, [mode, sesis, user, showToast]);
 
   const currentMode   = SCAN_MODES?.find(m => m.id === mode) || { label: mode };

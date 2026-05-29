@@ -155,8 +155,8 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
             if (decoded) {
               const last = lastScanRef.current;
               const now2 = Date.now();
-              // Debounce cerdas: abaikan QR sama dalam 2.5 detik
-              if (decoded !== last.text || now2 - last.at > 2500) {
+              // Debounce cerdas: abaikan QR sama dalam 1 detik
+              if (decoded !== last.text || now2 - last.at > 1000) {
                 lastScanRef.current = { text: decoded, at: now2 };
                 onScanSuccess?.(decoded);
               }
