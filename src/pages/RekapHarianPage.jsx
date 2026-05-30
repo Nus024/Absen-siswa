@@ -106,7 +106,7 @@ export function RekapHarianPage({ user }) {
   const [selectedSiswaIds, setSelectedSiswaIds] = useState([]);
   const [openBulkExportModal, setOpenBulkExportModal] = useState(false);
 
-  const canEdit = ['admin', 'tu', 'wali_kelas'].includes(user?.role);
+  const canEdit = ['admin', 'pengawas'].includes(user?.role);
 
   // Load kelas & sesi awal
   useEffect(() => {

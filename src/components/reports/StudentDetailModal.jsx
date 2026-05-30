@@ -60,7 +60,7 @@ export default function StudentDetailModal({ siswa, sesis, defaultBulan, default
           date,
           sesiId: sesi.id,
           sesiNama: sesi.nama,
-          status: rec?.status || 'alpha',
+          status: rec?.status || null,
           waktuScan: rec?.waktu_scan 
             ? new Date(rec.waktu_scan).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) 
             : '—',
@@ -233,7 +233,11 @@ export default function StudentDetailModal({ siswa, sesis, defaultBulan, default
                         <td style={{ padding: '8px 12px', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{formatTanggalIndo(r.date)}</td>
                         <td style={{ padding: '8px 12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{r.sesiNama}</td>
                         <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                          <Badge variant={r.status}>{STATUS_ABSENSI[r.status]?.code || 'A'}</Badge>
+                          {r.status ? (
+                            <Badge variant={r.status}>{STATUS_ABSENSI[r.status]?.code}</Badge>
+                          ) : (
+                            <span style={{ color: 'var(--color-neutral-300)' }}>—</span>
+                          )}
                         </td>
                         <td style={{ padding: '8px 12px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{r.waktuScan}</td>
                         <td style={{ padding: '8px 12px', color: 'var(--text-secondary)', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.catatan}>{r.catatan}</td>
