@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 
-export default function DatePicker({ value, onChange, style }) {
+export default function DatePicker({ value, onChange, style, align = 'right' }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -111,7 +111,7 @@ export default function DatePicker({ value, onChange, style }) {
         <div style={{
           position: 'absolute',
           top: 'calc(100% + 4px)',
-          right: 0,
+          ...(align === 'left' ? { left: 0 } : { right: 0 }),
           zIndex: 150,
           width: '280px',
           background: 'var(--bg-card)',

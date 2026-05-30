@@ -95,7 +95,64 @@ export default function StudentDetailModal({ siswa, sesis, defaultBulan, default
 
   return createPortal(
     <div className="modal-scrim" onClick={onClose}>
-      <div className="modal-panel" style={{ maxWidth: 720, width: '95%', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
+      <style dangerouslySetInnerHTML={{__html: `
+        .modal-filter-bar {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          background: var(--color-neutral-50);
+          padding: 12px;
+          border-radius: 8px;
+          flex-wrap: wrap;
+        }
+        .modal-filter-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .modal-filter-label {
+          font-size: var(--text-xs);
+          font-weight: 600;
+          color: var(--text-secondary);
+        }
+        .modal-filter-btn {
+          margin-left: auto;
+        }
+        .modal-stats-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 8px;
+        }
+        @media (max-width: 640px) {
+          .modal-filter-bar {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 10px;
+          }
+          .modal-filter-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+          }
+          .modal-filter-item > div {
+            width: 100%;
+          }
+          .modal-filter-btn {
+            grid-column: 1 / 3;
+            width: 100%;
+            margin-left: 0;
+          }
+          .modal-filter-btn button {
+            width: 100% !important;
+            justify-content: center;
+          }
+          .modal-stats-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+        }
+      `}} />
+      <div className="modal-panel" style={{ maxWidth: 720, width: '95%', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'visible' }} onClick={e => e.stopPropagation()}>
         
         {/* Header */}
         <div className="modal-header">
@@ -111,21 +168,27 @@ export default function StudentDetailModal({ siswa, sesis, defaultBulan, default
         <div className="modal-divider" />
 
         {/* Body */}
-        <div className="modal-body stack-4" style={{ flex: 1, overflowY: 'auto', paddingBottom: 16 }}>
+        <div className="modal-body stack-4" style={{ flex: 1, paddingBottom: 16, overflow: 'visible' }}>
           
           {/* Controls: Date Filter */}
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', background: 'var(--color-neutral-50)', padding: 12, borderRadius: 8 }}>
-            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-secondary)' }}>Mulai:</span>
-            <DatePicker value={startDate} onChange={setStartDate} />
+          <div className="modal-filter-bar">
+            <div className="modal-filter-item">
+              <span className="modal-filter-label">Mulai:</span>
+              <DatePicker value={startDate} onChange={setStartDate} align="left" />
+            </div>
             
-            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-secondary)' }}>Selesai:</span>
-            <DatePicker value={endDate} onChange={setEndDate} />
+            <div className="modal-filter-item">
+              <span className="modal-filter-label">Selesai:</span>
+              <DatePicker value={endDate} onChange={setEndDate} align="right" />
+            </div>
 
-            <Button size="sm" onClick={handleExport} style={{ marginLeft: 'auto' }} icon={<Download size={14} />}>Excel</Button>
+            <div className="modal-filter-btn">
+              <Button size="sm" onClick={handleExport} icon={<Download size={14} />}>Excel</Button>
+            </div>
           </div>
 
           {/* Stats Summary Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+          <div className="modal-stats-grid">
             <div style={{ background: 'var(--color-primary-50)', padding: 10, borderRadius: 8, textAlign: 'center', border: '1px solid var(--color-primary-100)' }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-primary-700)', textTransform: 'uppercase' }}>Hadir</div>
               <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--color-primary-800)' }}>{summary.H}</div>
@@ -151,8 +214,8 @@ export default function StudentDetailModal({ siswa, sesis, defaultBulan, default
                 <span className="spinner" /> Memuat rincian…
               </div>
             ) : (
-              <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
+              <div style={{ maxHeight: 280, overflowY: 'auto', overflowX: 'auto' }}>
+                <table style={{ width: '100%', minWidth: 500, borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
                   <thead>
                     <tr style={{ background: 'var(--color-neutral-50)', borderBottom: '1px solid var(--border-default)', fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                       <th style={{ padding: '8px 12px', textAlign: 'left' }}>Hari, Tanggal</th>
@@ -167,8 +230,8 @@ export default function StudentDetailModal({ siswa, sesis, defaultBulan, default
                       <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>Tidak ada data pada periode ini</td></tr>
                     ) : displayRows.map((r, idx) => (
                       <tr key={`${r.date}_${r.sesiId}`} style={{ borderBottom: '1px solid var(--color-neutral-100)' }}>
-                        <td style={{ padding: '8px 12px', color: 'var(--text-primary)' }}>{formatTanggalIndo(r.date)}</td>
-                        <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>{r.sesiNama}</td>
+                        <td style={{ padding: '8px 12px', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{formatTanggalIndo(r.date)}</td>
+                        <td style={{ padding: '8px 12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{r.sesiNama}</td>
                         <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                           <Badge variant={r.status}>{STATUS_ABSENSI[r.status]?.code || 'A'}</Badge>
                         </td>
