@@ -86,7 +86,7 @@ export function RekapBulananPage({ user }) {
   }
 
   function getSummary(siswaId) {
-    let H = 0, I = 0, S = 0, A = 0, D = 0;
+    let H = 0, I = 0, S = 0, A = 0;
     days.forEach(d => {
       const st = getStatusForDay(siswaId, d);
       if (!st) return;
@@ -94,9 +94,8 @@ export function RekapBulananPage({ user }) {
       else if (st === 'izin') I++;
       else if (st === 'sakit') S++;
       else if (st === 'alpha') A++;
-      else if (st === 'dispensasi') D++;
     });
-    return { H, I, S, A, D };
+    return { H, I, S, A };
   }
 
   const tahunOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
@@ -104,6 +103,32 @@ export function RekapBulananPage({ user }) {
 
   return (
     <div className="stack-6">
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          @page {
+            size: landscape;
+            margin: 8mm;
+          }
+          .print-container {
+            display: block !important;
+            width: 100%;
+          }
+          .print-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8px !important;
+          }
+          .print-table th, .print-table td {
+            padding: 3px 2px !important;
+            border: 1px solid #000 !important;
+            text-align: center;
+          }
+          .print-table th:nth-child(3), .print-table td:nth-child(3) {
+            text-align: left;
+            padding-left: 4px !important;
+          }
+        }
+      `}} />
       <div className="desktop-header-wrap">
         <Header title="Rekap Absensi Bulanan" subtitle={`${MONTHS_ID[bulan - 1]} ${tahun}`}
           actions={
@@ -154,12 +179,11 @@ export function RekapBulananPage({ user }) {
                   <th style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', color: 'var(--color-info)' }}>I</th>
                   <th style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', color: 'var(--color-warning)' }}>S</th>
                   <th style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', color: 'var(--color-danger)' }}>A</th>
-                  <th style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center' }}>D</th>
                 </tr>
               </thead>
               <tbody>
                 {siswas.length === 0 ? (
-                  <tr><td colSpan={daysInMonth + 7} style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-muted)' }}>Tidak ada siswa</td></tr>
+                  <tr><td colSpan={daysInMonth + 6} style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-muted)' }}>Tidak ada siswa</td></tr>
                 ) : siswas.map((siswa, idx) => {
                   const sum = getSummary(siswa.id);
                   return (
@@ -170,7 +194,7 @@ export function RekapBulananPage({ user }) {
                         const st = getStatusForDay(siswa.id, d);
                         return (
                           <td key={d} style={{ padding: '4px', textAlign: 'center' }}>
-                            {st ? <Badge variant={st === 'dispensasi' ? 'terlambat' : st}>{STATUS_ABSENSI[st]?.code}</Badge>
+                            {st ? <Badge variant={st}>{STATUS_ABSENSI[st]?.code}</Badge>
                                 : <span style={{ color: 'var(--color-neutral-300)' }}>·</span>}
                           </td>
                         );
@@ -179,7 +203,6 @@ export function RekapBulananPage({ user }) {
                       <td style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', fontWeight: 'bold', color: 'var(--color-info)' }}>{sum.I}</td>
                       <td style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', fontWeight: 'bold', color: 'var(--color-warning)' }}>{sum.S}</td>
                       <td style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', fontWeight: 'bold', color: 'var(--color-danger)' }}>{sum.A}</td>
-                      <td style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', fontWeight: 'bold' }}>{sum.D}</td>
                     </tr>
                   );
                 })}
@@ -201,29 +224,40 @@ export function RekapBulananPage({ user }) {
           <table className="print-table">
             <thead>
               <tr>
-                <th style={{ width: '40px', textAlign: 'center' }}>NO</th>
-                <th style={{ width: '120px' }}>NIS</th>
-                <th>NAMA SISWA</th>
-                <th style={{ width: '60px', textAlign: 'center' }}>H</th>
-                <th style={{ width: '60px', textAlign: 'center' }}>I</th>
-                <th style={{ width: '60px', textAlign: 'center' }}>S</th>
-                <th style={{ width: '60px', textAlign: 'center' }}>A</th>
+                <th style={{ width: '30px', textAlign: 'center' }}>NO</th>
+                <th style={{ width: '80px', textAlign: 'center' }}>NIS</th>
+                <th style={{ textAlign: 'left' }}>NAMA SISWA</th>
+                {days.map(d => (
+                  <th key={d} style={{ width: '18px', textAlign: 'center' }}>{d}</th>
+                ))}
+                <th style={{ width: '22px', textAlign: 'center' }}>H</th>
+                <th style={{ width: '22px', textAlign: 'center' }}>I</th>
+                <th style={{ width: '22px', textAlign: 'center' }}>S</th>
+                <th style={{ width: '22px', textAlign: 'center' }}>A</th>
               </tr>
             </thead>
             <tbody>
               {siswas.length === 0 ? (
-                <tr><td colSpan={7} style={{ textAlign: 'center' }}>Tidak ada data</td></tr>
+                <tr><td colSpan={days.length + 7} style={{ textAlign: 'center' }}>Tidak ada data</td></tr>
               ) : siswas.map((siswa, idx) => {
                 const sum = getSummary(siswa.id);
                 return (
                   <tr key={siswa.id}>
                     <td style={{ textAlign: 'center' }}>{idx + 1}</td>
-                    <td>{siswa.nis}</td>
+                    <td style={{ textAlign: 'center' }}>{siswa.nis}</td>
                     <td>{siswa.nama}</td>
-                    <td style={{ textAlign: 'center' }}>{sum.H}</td>
-                    <td style={{ textAlign: 'center' }}>{sum.I}</td>
-                    <td style={{ textAlign: 'center' }}>{sum.S}</td>
-                    <td style={{ textAlign: 'center' }}>{sum.A}</td>
+                    {days.map(d => {
+                      const st = getStatusForDay(siswa.id, d);
+                      const codes = { hadir: 'H', izin: 'I', sakit: 'S', alpha: 'A' };
+                      const val = st ? (codes[st] || '-') : '-';
+                      return (
+                        <td key={d} style={{ textAlign: 'center' }}>{val}</td>
+                      );
+                    })}
+                    <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{sum.H}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{sum.I}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{sum.S}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{sum.A}</td>
                   </tr>
                 );
               })}

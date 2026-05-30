@@ -26,7 +26,6 @@ const STATUS_CONFIG = {
   izin:       { code: 'I', label: 'Izin',       variant: 'izin' },
   sakit:      { code: 'S', label: 'Sakit',      variant: 'sakit' },
   alpha:      { code: 'A', label: 'Alpha',      variant: 'alpha' },
-  dispensasi: { code: 'D', label: 'Disp.',      variant: 'terlambat' },
 };
 
 function StatusPopover({ cellRef, current, onSelect, onClose }) {
@@ -164,7 +163,7 @@ export function RekapHarianPage({ user }) {
   }, [absensiData]);
 
   const summary = useMemo(() => {
-    const s = { H: 0, I: 0, S: 0, A: 0, D: 0 };
+    const s = { H: 0, I: 0, S: 0, A: 0 };
     siswas.forEach(sw => {
       const first = sesis.map(se => absensiMap[`${sw.id}_${se.id}`]).find(Boolean);
       const st = first?.status;
@@ -215,7 +214,13 @@ export function RekapHarianPage({ user }) {
           actions={
             <div className="row-3">
               <Button size="sm" variant="ghost" onClick={() => window.print()} icon={<Printer size={16} />}>Cetak</Button>
-              <Button size="sm" onClick={() => exportRekapHarian({ siswas, absensiByDate: {}, sesis, tanggal, namaKelas: kelas?.nama })} icon={<Download size={16} />}>Excel</Button>
+              <Button size="sm" onClick={() => {
+                const absensiByDate = {};
+                absensiData.forEach(a => {
+                  absensiByDate[`${a.siswa_id}_${a.sesi_id}_${tanggal}`] = a.status;
+                });
+                exportRekapHarian({ siswas, absensiByDate, sesis, tanggal, namaKelas: kelas?.nama });
+              }} icon={<Download size={16} />}>Excel</Button>
             </div>
           }
         />
@@ -228,7 +233,13 @@ export function RekapHarianPage({ user }) {
         </div>
         <div className="mobile-action-buttons">
           <Button size="sm" variant="ghost" onClick={() => window.print()} icon={<Printer size={16} />}>Cetak</Button>
-          <Button size="sm" onClick={() => exportRekapHarian({ siswas, absensiByDate: {}, sesis, tanggal, namaKelas: kelas?.nama })} icon={<Download size={16} />}>Excel</Button>
+          <Button size="sm" onClick={() => {
+            const absensiByDate = {};
+            absensiData.forEach(a => {
+              absensiByDate[`${a.siswa_id}_${a.sesi_id}_${tanggal}`] = a.status;
+            });
+            exportRekapHarian({ siswas, absensiByDate, sesis, tanggal, namaKelas: kelas?.nama });
+          }} icon={<Download size={16} />}>Excel</Button>
         </div>
       </div>
 
@@ -291,7 +302,7 @@ export function RekapHarianPage({ user }) {
                 sesis.forEach(se => {
                   const rec = absensiMap[`${sw.id}_${se.id}`];
                   if (!rec) { A++; return; }
-                  if (rec.status === 'hadir' || rec.status === 'dispensasi') H++;
+                  if (rec.status === 'hadir') H++;
                   else if (rec.status === 'izin') I++;
                   else if (rec.status === 'sakit') S++;
                   else A++;

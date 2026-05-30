@@ -16,27 +16,23 @@ export function exportRekapBulanan({ siswas, absensiMap, sesis, bulan, tahun, na
   const blankRow = [];
 
   // Header kolom tabel
-  const sesiLabels = sesis.map(s => s.nama);
-  const headerRow = ['No', 'NIS', 'Nama', 'Kelas', ...days.map(d => d.toString()), 'H', 'I', 'S', 'A', 'D'];
+  const headerRow = ['No', 'NIS', 'Nama', 'Kelas', ...days.map(d => d.toString()), 'H', 'I', 'S', 'A'];
 
   const dataRows = siswas.map((siswa, idx) => {
-    let H = 0, I = 0, S = 0, A = 0, D = 0;
+    let H = 0, I = 0, S = 0, A = 0;
     const dayValues = days.map(d => {
       const dateStr = `${tahun}-${bulan.toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
       const key = `${siswa.id}_${dateStr}`;
-      const statuses = absensiMap[key] || [];
-      if (statuses.length === 0) return '';
-      // Ambil status sesi pertama sebagai representasi hari
-      const s = statuses[0];
+      const s = absensiMap[key];
+      if (!s) return '';
       if (s === 'hadir') H++;
       else if (s === 'izin') I++;
       else if (s === 'sakit') S++;
       else if (s === 'alpha') A++;
-      else if (s === 'dispensasi') D++;
-      const codes = { hadir: 'H', izin: 'I', sakit: 'S', alpha: 'A', dispensasi: 'D' };
+      const codes = { hadir: 'H', izin: 'I', sakit: 'S', alpha: 'A' };
       return codes[s] || s;
     });
-    return [idx + 1, siswa.nis, siswa.nama, siswa.kelas_nama || '', ...dayValues, H, I, S, A, D];
+    return [idx + 1, siswa.nis, siswa.nama, siswa.kelas_nama || '', ...dayValues, H, I, S, A];
   });
 
   const aoa = [judulRow, periodeRow, blankRow, headerRow, ...dataRows];
@@ -44,7 +40,7 @@ export function exportRekapBulanan({ siswas, absensiMap, sesis, bulan, tahun, na
 
   // Lebar kolom
   const colWidths = [{ wch: 4 }, { wch: 14 }, { wch: 25 }, { wch: 12 },
-    ...days.map(() => ({ wch: 4 })), { wch: 5 }, { wch: 5 }, { wch: 5 }, { wch: 5 }, { wch: 5 }];
+    ...days.map(() => ({ wch: 4 })), { wch: 5 }, { wch: 5 }, { wch: 5 }, { wch: 5 }];
   ws['!cols'] = colWidths;
 
   const wb = XLSX.utils.book_new();
@@ -61,7 +57,7 @@ export function exportRekapHarian({ siswas, absensiByDate, sesis, tanggal, namaK
     const sesiValues = sesis.map(sesi => {
       const key = `${siswa.id}_${sesi.id}_${tanggal}`;
       const status = absensiByDate[key] || 'A';
-      const codes = { hadir: 'H', izin: 'I', sakit: 'S', alpha: 'A', dispensasi: 'D' };
+      const codes = { hadir: 'H', izin: 'I', sakit: 'S', alpha: 'A' };
       return codes[status] || status;
     });
     const totalHadir = sesiValues.filter(v => v === 'H').length;

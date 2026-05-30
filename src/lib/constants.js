@@ -7,7 +7,6 @@ export const STATUS_ABSENSI = {
   izin:  { label: 'Izin',  code: 'I', badge: 'badge-I' },
   sakit: { label: 'Sakit', code: 'S', badge: 'badge-S' },
   alpha: { label: 'Alpha', code: 'A', badge: 'badge-A' },
-  dispensasi: { label: 'Dispensasi', code: 'D', badge: 'badge-D' },
 };
 
 export const ROLES = {

@@ -109,3 +109,5 @@ export const settingsService = {
     }
   },
 };
+
+export const settingsDB = settingsService;
