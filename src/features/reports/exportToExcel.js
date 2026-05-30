@@ -46,7 +46,8 @@ export function exportRekapBulanan({ siswas, absensiMap, sesis, bulan, tahun, na
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Rekap Bulanan');
 
-  const filename = `rekap_${namaKelas ? namaKelas.replace(/\s/g,'_') + '_' : ''}${MONTHS_ID[bulan-1]}_${tahun}.xlsx`;
+  const kelasNama = namaKelas ? namaKelas.replace(/\s+/g, '_') : 'Semua_Kelas';
+  const filename = `Rekap_Absensi_Bulanan_${kelasNama}_${MONTHS_ID[bulan - 1]}_${tahun}.xlsx`;
   XLSX.writeFile(wb, filename);
 }
 

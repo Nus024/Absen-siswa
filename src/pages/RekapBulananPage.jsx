@@ -101,6 +101,17 @@ export function RekapBulananPage({ user }) {
   const tahunOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
   const kelas = kelasList.find(k => k.id === kelasId);
 
+  const handlePrint = () => {
+    const originalTitle = document.title;
+    const kelasNama = kelas?.nama ? kelas.nama.replace(/\s+/g, '_') : 'Semua_Kelas';
+    const bulanNama = MONTHS_ID[bulan - 1];
+    document.title = `Rekap_Absensi_Bulanan_${kelasNama}_${bulanNama}_${tahun}`;
+    window.print();
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1000);
+  };
+
   return (
     <div className="stack-6">
       <style dangerouslySetInnerHTML={{__html: `
@@ -133,7 +144,7 @@ export function RekapBulananPage({ user }) {
         <Header title="Rekap Absensi Bulanan" subtitle={`${MONTHS_ID[bulan - 1]} ${tahun}`}
           actions={
             <div className="row-3">
-              <Button size="sm" variant="ghost" onClick={() => window.print()} icon={<Printer size={16} />}>Cetak</Button>
+              <Button size="sm" variant="ghost" onClick={handlePrint} icon={<Printer size={16} />}>Cetak</Button>
               <Button size="sm" onClick={() => exportRekapBulanan({ siswas, absensiMap, sesis, bulan, tahun, namaKelas: kelas?.nama })} icon={<Download size={16} />}>Excel</Button>
             </div>
           }
@@ -146,7 +157,7 @@ export function RekapBulananPage({ user }) {
           <Link to="/rekap-bulanan" className="active">BULANAN</Link>
         </div>
         <div className="mobile-action-buttons">
-          <Button size="sm" variant="ghost" onClick={() => window.print()} icon={<Printer size={16} />}>Cetak</Button>
+          <Button size="sm" variant="ghost" onClick={handlePrint} icon={<Printer size={16} />}>Cetak</Button>
           <Button size="sm" onClick={() => exportRekapBulanan({ siswas, absensiMap, sesis, bulan, tahun, namaKelas: kelas?.nama })} icon={<Download size={16} />}>Excel</Button>
         </div>
       </div>
