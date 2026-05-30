@@ -80,3 +80,171 @@ export function exportRekapHarian({ siswas, absensiByDate, sesis, tanggal, namaK
   XLSX.utils.book_append_sheet(wb, ws, 'Rekap Harian');
   XLSX.writeFile(wb, `rekap_harian_${tanggal}.xlsx`);
 }
+
+export function exportDetailSiswa({ siswa, displayRows, startDate, endDate }) {
+  const schoolName = localStorage.getItem('school_name') || 'Absensi QR';
+  
+  // Header Info Siswa
+  const headerInfo = [
+    [`RINCIAN ABSENSI INDIVIDU — ${schoolName.toUpperCase()}`],
+    [`Nama Siswa: ${siswa.nama}`],
+    [`NIS: ${siswa.nis}`],
+    [`Periode: ${startDate} s/d ${endDate}`],
+    []
+  ];
+
+  const headerRow = ['No', 'Tanggal', 'Sesi', 'Status', 'Waktu Scan', 'Catatan'];
+  
+  const dataRows = displayRows.map((r, idx) => {
+    const codes = { hadir: 'H', izin: 'I', sakit: 'S', alpha: 'A' };
+    return [
+      idx + 1,
+      r.date,
+      r.sesiNama,
+      codes[r.status] || r.status,
+      r.waktuScan,
+      r.catatan
+    ];
+  });
+
+  const aoa = [...headerInfo, headerRow, ...dataRows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  // Set widths
+  ws['!cols'] = [
+    { wch: 5 },  // No
+    { wch: 12 }, // Tanggal
+    { wch: 15 }, // Sesi
+    { wch: 8 },  // Status
+    { wch: 12 }, // Waktu Scan
+    { wch: 25 }  // Catatan
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const cleanName = siswa.nama.substring(0, 30).replace(/[:\\/?*\[\]]/g, '');
+  XLSX.utils.book_append_sheet(wb, ws, cleanName);
+
+  const filename = `Rincian_Absen_${siswa.nama.replace(/\s+/g, '_')}_${startDate}_to_${endDate}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+export function exportDetailSiswaBulk({ siswas, absensiData, sesis, startDate, endDate }) {
+  const wb = XLSX.utils.book_new();
+  const schoolName = localStorage.getItem('school_name') || 'Absensi QR';
+
+  // 1. BUAT SHEET MASTER (Semua Siswa)
+  const masterHeader = [
+    [`REKAP RINCIAN ABSENSI KELOMPOK — ${schoolName.toUpperCase()}`],
+    [`Periode: ${startDate} s/d ${endDate}`],
+    []
+  ];
+  const masterCols = ['No', 'NIS', 'Nama Siswa', 'Kelas', 'Tanggal', 'Sesi', 'Status', 'Waktu Scan', 'Catatan'];
+  
+  // Map absensiData for quick lookup: `${siswa_id}_${tanggal}_${sesi_id}` -> record
+  const recordMap = {};
+  absensiData.forEach(a => {
+    recordMap[`${a.siswa_id}_${a.tanggal}_${a.sesi_id}`] = a;
+  });
+
+  const dates = [];
+  const curr = new Date(startDate + 'T00:00:00');
+  const end = new Date(endDate + 'T00:00:00');
+  while (curr <= end) {
+    dates.push(curr.toLocaleDateString('sv-SE'));
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  const masterRows = [];
+  let globalIdx = 1;
+
+  siswas.forEach(siswa => {
+    dates.forEach(date => {
+      sesis.forEach(sesi => {
+        const rec = recordMap[`${siswa.id}_${date}_${sesi.id}`];
+        const status = rec?.status || 'alpha';
+        const waktuScan = rec?.waktu_scan ? new Date(rec.waktu_scan).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '—';
+        const catatan = rec?.catatan || '—';
+        const codes = { hadir: 'H', izin: 'I', sakit: 'S', alpha: 'A' };
+
+        masterRows.push([
+          globalIdx++,
+          siswa.nis,
+          siswa.nama,
+          siswa.kelas_nama || '',
+          date,
+          sesi.nama,
+          codes[status] || status,
+          waktuScan,
+          catatan
+        ]);
+      });
+    });
+  });
+
+  const masterAoa = [...masterHeader, masterCols, ...masterRows];
+  const masterWs = XLSX.utils.aoa_to_sheet(masterAoa);
+  masterWs['!cols'] = [
+    { wch: 5 },  // No
+    { wch: 14 }, // NIS
+    { wch: 25 }, // Nama Siswa
+    { wch: 12 }, // Kelas
+    { wch: 12 }, // Tanggal
+    { wch: 15 }, // Sesi
+    { wch: 8 },  // Status
+    { wch: 12 }, // Waktu Scan
+    { wch: 25 }  // Catatan
+  ];
+  XLSX.utils.book_append_sheet(wb, masterWs, 'Semua Siswa');
+
+  // 2. BUAT SHEET INDIVIDUAL UNTUK TIAP SISWA (Jika jumlah siswa <= 50 untuk cegah crash)
+  if (siswas.length <= 50) {
+    siswas.forEach(siswa => {
+      const studentHeader = [
+        [`RINCIAN ABSENSI INDIVIDU — ${schoolName.toUpperCase()}`],
+        [`Nama Siswa: ${siswa.nama}`],
+        [`NIS: ${siswa.nis}`],
+        [`Periode: ${startDate} s/d ${endDate}`],
+        []
+      ];
+      const studentCols = ['No', 'Tanggal', 'Sesi', 'Status', 'Waktu Scan', 'Catatan'];
+      const studentRows = [];
+      let sIdx = 1;
+
+      dates.forEach(date => {
+        sesis.forEach(sesi => {
+          const rec = recordMap[`${siswa.id}_${date}_${sesi.id}`];
+          const status = rec?.status || 'alpha';
+          const waktuScan = rec?.waktu_scan ? new Date(rec.waktu_scan).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '—';
+          const catatan = rec?.catatan || '—';
+          const codes = { hadir: 'H', izin: 'I', sakit: 'S', alpha: 'A' };
+
+          studentRows.push([
+            sIdx++,
+            date,
+            sesi.nama,
+            codes[status] || status,
+            waktuScan,
+            catatan
+          ]);
+        });
+      });
+
+      const studentAoa = [...studentHeader, studentCols, ...studentRows];
+      const studentWs = XLSX.utils.aoa_to_sheet(studentAoa);
+      studentWs['!cols'] = [
+        { wch: 5 },  // No
+        { wch: 12 }, // Tanggal
+        { wch: 15 }, // Sesi
+        { wch: 8 },  // Status
+        { wch: 12 }, // Waktu Scan
+        { wch: 25 }  // Catatan
+      ];
+      
+      const cleanName = siswa.nama.substring(0, 30).replace(/[:\\/?*\[\]]/g, '');
+      XLSX.utils.book_append_sheet(wb, studentWs, cleanName);
+    });
+  }
+
+  const filename = `Rincian_Absen_Kelompok_${startDate}_to_${endDate}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}

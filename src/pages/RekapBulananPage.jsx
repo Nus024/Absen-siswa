@@ -11,6 +11,8 @@ import { absensiService } from '../lib/db/absensi';
 import { STATUS_ABSENSI, MONTHS_ID } from '../lib/constants';
 import { exportRekapBulanan } from '../features/reports/exportToExcel';
 import { Download, Printer } from 'lucide-react';
+import StudentDetailModal from '../components/reports/StudentDetailModal';
+import BulkExportModal from '../components/reports/BulkExportModal';
 import Header  from '../components/ui/Header';
 import Card    from '../components/ui/Card';
 import Button  from '../components/ui/Button';
@@ -27,6 +29,9 @@ export function RekapBulananPage({ user }) {
   const [siswas, setSiswas]       = useState([]);
   const [absensiData, setAbsensiData] = useState([]);
   const [loading, setLoading]     = useState(false);
+  const [selectedSiswaIdForDetail, setSelectedSiswaIdForDetail] = useState(null);
+  const [selectedSiswaIds, setSelectedSiswaIds] = useState([]);
+  const [openBulkExportModal, setOpenBulkExportModal] = useState(false);
 
   // Load kelas & sesi awal
   useEffect(() => {
@@ -51,7 +56,10 @@ export function RekapBulananPage({ user }) {
   // Load siswa saat kelas berubah
   useEffect(() => {
     if (!kelasId) return;
-    siswaService.getByKelas(kelasId).then(setSiswas).catch(console.error);
+    siswaService.getByKelas(kelasId).then(data => {
+      setSiswas(data);
+      setSelectedSiswaIds([]);
+    }).catch(console.error);
   }, [kelasId]);
 
   // Load absensi bulan ini
@@ -101,6 +109,20 @@ export function RekapBulananPage({ user }) {
   const tahunOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
   const kelas = kelasList.find(k => k.id === kelasId);
 
+  const handleSelectSiswa = (siswaId) => {
+    setSelectedSiswaIds(prev =>
+      prev.includes(siswaId) ? prev.filter(id => id !== siswaId) : [...prev, siswaId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedSiswaIds.length === siswas.length) {
+      setSelectedSiswaIds([]);
+    } else {
+      setSelectedSiswaIds(siswas.map(s => s.id));
+    }
+  };
+
   const handlePrint = () => {
     const originalTitle = document.title;
     const kelasNama = kelas?.nama ? kelas.nama.replace(/\s+/g, '_') : 'Semua_Kelas';
@@ -144,6 +166,7 @@ export function RekapBulananPage({ user }) {
         <Header title="Rekap Absensi Bulanan" subtitle={`${MONTHS_ID[bulan - 1]} ${tahun}`}
           actions={
             <div className="row-3">
+              <Button size="sm" variant="secondary" onClick={() => setOpenBulkExportModal(true)} icon={<Download size={16} />}>Ekspor Rincian</Button>
               <Button size="sm" variant="ghost" onClick={handlePrint} icon={<Printer size={16} />}>Cetak</Button>
               <Button size="sm" onClick={() => exportRekapBulanan({ siswas, absensiMap, sesis, bulan, tahun, namaKelas: kelas?.nama })} icon={<Download size={16} />}>Excel</Button>
             </div>
@@ -157,6 +180,7 @@ export function RekapBulananPage({ user }) {
           <Link to="/rekap-bulanan" className="active">BULANAN</Link>
         </div>
         <div className="mobile-action-buttons">
+          <Button size="sm" variant="secondary" onClick={() => setOpenBulkExportModal(true)} icon={<Download size={16} />}>Rincian</Button>
           <Button size="sm" variant="ghost" onClick={handlePrint} icon={<Printer size={16} />}>Cetak</Button>
           <Button size="sm" onClick={() => exportRekapBulanan({ siswas, absensiMap, sesis, bulan, tahun, namaKelas: kelas?.nama })} icon={<Download size={16} />}>Excel</Button>
         </div>
@@ -183,7 +207,12 @@ export function RekapBulananPage({ user }) {
             <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
               <thead>
                 <tr style={{ background: 'var(--color-neutral-50)', borderBottom: '1px solid var(--border-default)', textTransform: 'uppercase', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-                  <th style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'left', position: 'sticky', left: 0, background: 'var(--color-neutral-50)', zIndex: 2 }}>#</th>
+                  <th style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'left', position: 'sticky', left: 0, background: 'var(--color-neutral-50)', zIndex: 2 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <input type="checkbox" checked={selectedSiswaIds.length === siswas.length && siswas.length > 0} onChange={handleSelectAll} style={{ cursor: 'pointer' }} />
+                      <span>#</span>
+                    </div>
+                  </th>
                   <th style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'left', position: 'sticky', left: 40, background: 'var(--color-neutral-50)', zIndex: 2 }}>Nama Siswa</th>
                   {days.map(d => <th key={d} style={{ padding: 'var(--space-3) 4px', textAlign: 'center' }}>{d}</th>)}
                   <th style={{ padding: 'var(--space-3) var(--space-2)', textAlign: 'center', color: 'var(--color-success)' }}>H</th>
@@ -199,8 +228,31 @@ export function RekapBulananPage({ user }) {
                   const sum = getSummary(siswa.id);
                   return (
                     <tr key={siswa.id} style={{ borderBottom: '1px solid var(--color-neutral-100)' }}>
-                      <td style={{ padding: 'var(--space-3) var(--space-4)', position: 'sticky', left: 0, background: 'var(--bg-card)', zIndex: 1 }}>{idx + 1}</td>
-                      <td style={{ padding: 'var(--space-3) var(--space-4)', position: 'sticky', left: 40, background: 'var(--bg-card)', zIndex: 1 }}>{siswa.nama}</td>
+                      <td style={{ padding: 'var(--space-3) var(--space-4)', position: 'sticky', left: 0, background: 'var(--bg-card)', zIndex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <input type="checkbox" checked={selectedSiswaIds.includes(siswa.id)} onChange={() => handleSelectSiswa(siswa.id)} style={{ cursor: 'pointer' }} />
+                          <span>{idx + 1}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: 'var(--space-3) var(--space-4)', position: 'sticky', left: 40, background: 'var(--bg-card)', zIndex: 1 }}>
+                        <button
+                          onClick={() => setSelectedSiswaIdForDetail(siswa.id)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--color-primary-600)',
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                            padding: 0,
+                            textAlign: 'left',
+                            fontWeight: 'inherit',
+                            fontFamily: 'inherit',
+                            fontSize: 'inherit'
+                          }}
+                        >
+                          {siswa.nama}
+                        </button>
+                      </td>
                       {days.map(d => {
                         const st = getStatusForDay(siswa.id, d);
                         return (
@@ -276,6 +328,30 @@ export function RekapBulananPage({ user }) {
           </table>
         </div>,
         document.body
+      )}
+
+      {/* Detail Siswa Modal */}
+      {selectedSiswaIdForDetail && (
+        <StudentDetailModal
+          siswa={siswas.find(s => s.id === selectedSiswaIdForDetail)}
+          sesis={sesis}
+          defaultBulan={bulan}
+          defaultTahun={tahun}
+          onClose={() => setSelectedSiswaIdForDetail(null)}
+        />
+      )}
+
+      {/* Bulk Export Modal */}
+      {openBulkExportModal && (
+        <BulkExportModal
+          siswas={siswas}
+          selectedSiswaIds={selectedSiswaIds}
+          sesis={sesis}
+          defaultBulan={bulan}
+          defaultTahun={tahun}
+          onClose={() => setOpenBulkExportModal(false)}
+          onClearSelection={() => setSelectedSiswaIds([])}
+        />
       )}
     </div>
   );

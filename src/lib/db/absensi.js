@@ -81,6 +81,36 @@ export const absensiService = {
     return data;
   },
 
+  async getBySiswaDateRange(siswaId, startDateStr, endDateStr) {
+    const { data, error } = await supabase
+      .from('absensi')
+      .select('*, sesi:sesi_id(id, nama, urutan)')
+      .eq('siswa_id', siswaId)
+      .gte('tanggal', startDateStr)
+      .lte('tanggal', endDateStr)
+      .order('tanggal', { ascending: true })
+      .order('waktu_scan', { ascending: true });
+    if (error) throw error;
+    return data;
+  },
+
+  async getBySiswaIdsDateRange(siswaIds, startDateStr, endDateStr) {
+    const { data, error } = await supabase
+      .from('absensi')
+      .select(`
+        *,
+        siswa:siswa_id(id, nis, nama, kelas_id),
+        sesi:sesi_id(id, nama, urutan)
+      `)
+      .in('siswa_id', siswaIds)
+      .gte('tanggal', startDateStr)
+      .lte('tanggal', endDateStr)
+      .order('tanggal', { ascending: true })
+      .order('waktu_scan', { ascending: true });
+    if (error) throw error;
+    return data;
+  },
+
   async existsScan(siswaId, sesiId, tanggal) {
     const { count, error } = await supabase
       .from('absensi')

@@ -12,6 +12,8 @@ import { useRealtime }    from '../hooks/useRealtime';
 import { STATUS_ABSENSI, todayStr, formatTanggal, DAYS_ID } from '../lib/constants';
 import { exportRekapHarian } from '../features/reports/exportToExcel';
 import { Download, Printer, Search } from 'lucide-react';
+import StudentDetailModal from '../components/reports/StudentDetailModal';
+import BulkExportModal from '../components/reports/BulkExportModal';
 import Header    from '../components/ui/Header';
 import Table     from '../components/ui/Table';
 import Button    from '../components/ui/Button';
@@ -100,6 +102,9 @@ export function RekapHarianPage({ user }) {
   const [absensiData, setAbsensiData] = useState([]);
   const [search, setSearch]       = useState('');
   const [loading, setLoading]     = useState(false);
+  const [selectedSiswaIdForDetail, setSelectedSiswaIdForDetail] = useState(null);
+  const [selectedSiswaIds, setSelectedSiswaIds] = useState([]);
+  const [openBulkExportModal, setOpenBulkExportModal] = useState(false);
 
   const canEdit = ['admin', 'tu', 'wali_kelas'].includes(user?.role);
 
@@ -128,7 +133,10 @@ export function RekapHarianPage({ user }) {
   // Load siswa saat kelas berubah
   useEffect(() => {
     if (!kelasId) return;
-    siswaService.getByKelas(kelasId).then(setSiswas).catch(console.error);
+    siswaService.getByKelas(kelasId).then(data => {
+      setSiswas(data);
+      setSelectedSiswaIds([]);
+    }).catch(console.error);
   }, [kelasId]);
 
   // Load absensi
@@ -192,10 +200,65 @@ export function RekapHarianPage({ user }) {
   const hariStr = `${DAYS_ID[new Date(tanggal + 'T00:00:00').getDay()]}, ${formatTanggal(tanggal + 'T00:00:00')}`;
   const kelas = kelasList.find(k => k.id === kelasId);
 
+  const dateObj = new Date(tanggal + 'T00:00:00');
+  const bulan = dateObj.getMonth() + 1;
+  const tahun = dateObj.getFullYear();
+
+  const handleSelectSiswa = (siswaId) => {
+    setSelectedSiswaIds(prev =>
+      prev.includes(siswaId) ? prev.filter(id => id !== siswaId) : [...prev, siswaId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedSiswaIds.length === filtered.length) {
+      setSelectedSiswaIds([]);
+    } else {
+      setSelectedSiswaIds(filtered.map(s => s.id));
+    }
+  };
+
   const columns = [
-    { key: 'index', label: '#', width: '50px', render: (_, __, i) => i + 1 },
+    {
+      key: 'index',
+      label: (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <input type="checkbox" checked={selectedSiswaIds.length === filtered.length && filtered.length > 0} onChange={handleSelectAll} style={{ cursor: 'pointer' }} />
+          <span>#</span>
+        </div>
+      ),
+      width: '60px',
+      render: (_, row, idx) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <input type="checkbox" checked={selectedSiswaIds.includes(row.id)} onChange={() => handleSelectSiswa(row.id)} style={{ cursor: 'pointer' }} />
+          <span>{idx + 1}</span>
+        </div>
+      )
+    },
     { key: 'nis',   label: 'NIS',  width: '100px' },
-    { key: 'nama',  label: 'Nama Siswa' },
+    {
+      key: 'nama',
+      label: 'Nama Siswa',
+      render: (val, row) => (
+        <button
+          onClick={() => setSelectedSiswaIdForDetail(row.id)}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--color-primary-600)',
+            textDecoration: 'underline',
+            cursor: 'pointer',
+            padding: 0,
+            textAlign: 'left',
+            fontWeight: 'inherit',
+            fontFamily: 'inherit',
+            fontSize: 'inherit'
+          }}
+        >
+          {val}
+        </button>
+      )
+    },
     ...sesis.map(s => ({
       key:    `sesi_${s.id}`,
       label:  s.nama,
@@ -213,6 +276,7 @@ export function RekapHarianPage({ user }) {
         <Header title="Rekap Absensi Harian" subtitle={hariStr}
           actions={
             <div className="row-3">
+              <Button size="sm" variant="secondary" onClick={() => setOpenBulkExportModal(true)} icon={<Download size={16} />}>Ekspor Rincian</Button>
               <Button size="sm" variant="ghost" onClick={() => window.print()} icon={<Printer size={16} />}>Cetak</Button>
               <Button size="sm" onClick={() => {
                 const absensiByDate = {};
@@ -232,6 +296,7 @@ export function RekapHarianPage({ user }) {
           <Link to="/rekap-bulanan" className="inactive">BULANAN</Link>
         </div>
         <div className="mobile-action-buttons">
+          <Button size="sm" variant="secondary" onClick={() => setOpenBulkExportModal(true)} icon={<Download size={16} />}>Rincian</Button>
           <Button size="sm" variant="ghost" onClick={() => window.print()} icon={<Printer size={16} />}>Cetak</Button>
           <Button size="sm" onClick={() => {
             const absensiByDate = {};
@@ -323,6 +388,30 @@ export function RekapHarianPage({ user }) {
           </table>
         </div>,
         document.body
+      )}
+
+      {/* Detail Siswa Modal */}
+      {selectedSiswaIdForDetail && (
+        <StudentDetailModal
+          siswa={siswas.find(s => s.id === selectedSiswaIdForDetail)}
+          sesis={sesis}
+          defaultBulan={bulan}
+          defaultTahun={tahun}
+          onClose={() => setSelectedSiswaIdForDetail(null)}
+        />
+      )}
+
+      {/* Bulk Export Modal */}
+      {openBulkExportModal && (
+        <BulkExportModal
+          siswas={filtered}
+          selectedSiswaIds={selectedSiswaIds}
+          sesis={sesis}
+          defaultBulan={bulan}
+          defaultTahun={tahun}
+          onClose={() => setOpenBulkExportModal(false)}
+          onClearSelection={() => setSelectedSiswaIds([])}
+        />
       )}
     </div>
   );
