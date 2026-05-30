@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ScanFace, User, KeyRound, Loader2, Eye, EyeOff } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import { useTheme } from '../hooks/useTheme';
+import { settingsDB } from '../lib/db/settings';
 
 export function LoginPage({ onLogin }) {
   const [form, setForm] = useState({ username: '', password: '' });
@@ -11,6 +12,18 @@ export function LoginPage({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { theme } = useTheme();
+
+  const [schoolName, setSchoolName] = useState(localStorage.getItem('school_name') || 'Absensi Siswa');
+  const [schoolLogo, setSchoolLogo] = useState(localStorage.getItem('school_logo') || '');
+
+  // Load nama & logo dari Supabase saat pertama kali buka halaman login
+  useEffect(() => {
+    settingsDB.getAll().then(s => {
+      if (s.school_name) setSchoolName(s.school_name);
+      if (s.school_logo !== undefined) setSchoolLogo(s.school_logo || '');
+    });
+  }, []);
+
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -80,8 +93,8 @@ export function LoginPage({ onLogin }) {
               border: '3.5px solid var(--bg-card)',
               transition: 'border-color var(--transition-base), box-shadow var(--transition-base)'
             }}>
-              {localStorage.getItem('school_logo') ? (
-                <img src={localStorage.getItem('school_logo')} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {schoolLogo ? (
+                <img src={schoolLogo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 <ScanFace size={36} strokeWidth={1.75} />
               )}
@@ -94,7 +107,7 @@ export function LoginPage({ onLogin }) {
               lineHeight: 1.25,
               margin: 0
             }}>
-              {localStorage.getItem('school_name') || 'Absensi Siswa'}
+              {schoolName}
             </h1>
             <p style={{
               fontSize: '13px',

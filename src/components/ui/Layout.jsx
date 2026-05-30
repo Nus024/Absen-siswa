@@ -2,18 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Users, QrCode, ClipboardList, Settings, LogOut } from 'lucide-react';
 import styles from './Layout.module.css';
+import { settingsDB } from '../../lib/db/settings';
 
 export default function Layout({ user, onLogout, children }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [appName, setAppName] = useState(() => localStorage.getItem('school_name') || 'Absensi QR');
-  const [appLogo, setAppLogo] = useState(() => localStorage.getItem('school_logo') || '');
+  const [appName, setAppName] = useState(localStorage.getItem('school_name') || 'Absensi QR');
+  const [appLogo, setAppLogo] = useState(localStorage.getItem('school_logo') || '');
 
+  // Load dari Supabase saat pertama kali mount
+  useEffect(() => {
+    settingsDB.getAll().then(s => {
+      if (s.school_name) setAppName(s.school_name);
+      if (s.school_logo !== undefined) setAppLogo(s.school_logo || '');
+    });
+  }, []);
+
+  // Dengarkan perubahan dari halaman admin (perangkat yang sama)
   useEffect(() => {
     function handleUpdate() {
-      setAppName(localStorage.getItem('school_name') || 'Absensi QR');
-      setAppLogo(localStorage.getItem('school_logo') || '');
+      settingsDB.getAll().then(s => {
+        if (s.school_name) setAppName(s.school_name);
+        if (s.school_logo !== undefined) setAppLogo(s.school_logo || '');
+      });
     }
     window.addEventListener('app_settings_changed', handleUpdate);
     window.addEventListener('storage', handleUpdate);
@@ -22,6 +34,7 @@ export default function Layout({ user, onLogout, children }) {
       window.removeEventListener('storage', handleUpdate);
     };
   }, []);
+
 
   const navItems = [
     { label: 'Scanner', icon: <QrCode size={20} />, path: '/scanner' },

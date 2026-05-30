@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { siswaDB, kelasDB, sesiDB, usersDB } from '../lib/db/index';
+import { siswaDB, kelasDB, sesiDB, usersDB, settingsDB } from '../lib/db/index';
 
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useTheme } from '../hooks/useTheme';
@@ -126,8 +126,17 @@ export function AdminPage({ user, onLogout }) {
   const [activeView, setActiveView] = useState('menu');
   const [confirmData, setConfirmData] = useState(null);
 
-  const [schoolName, setSchoolName] = useState(() => localStorage.getItem('school_name') || 'Absensi QR');
-  const [schoolLogo, setSchoolLogo] = useState(() => localStorage.getItem('school_logo') || '');
+  const [schoolName, setSchoolName] = useState(localStorage.getItem('school_name') || 'Absensi QR');
+  const [schoolLogo, setSchoolLogo] = useState(localStorage.getItem('school_logo') || '');
+  const [settingsSaving, setSettingsSaving] = useState(false);
+
+  // Load settings dari Supabase saat pertama kali buka halaman
+  useEffect(() => {
+    settingsDB.getAll().then(s => {
+      if (s.school_name) setSchoolName(s.school_name);
+      if (s.school_logo !== undefined) setSchoolLogo(s.school_logo || '');
+    });
+  }, []);
 
   function handleLogoChange(e) {
     const file = e.target.files[0];
@@ -137,24 +146,28 @@ export function AdminPage({ user, onLogout }) {
       return;
     }
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       const base64 = evt.target.result;
       setSchoolLogo(base64);
-      localStorage.setItem('school_logo', base64);
+      setSettingsSaving(true);
+      await settingsDB.set('school_logo', base64);
+      setSettingsSaving(false);
       window.dispatchEvent(new Event('app_settings_changed'));
     };
     reader.readAsDataURL(file);
   }
 
-  function handleRemoveLogo() {
+  async function handleRemoveLogo() {
     setSchoolLogo('');
-    localStorage.removeItem('school_logo');
+    setSettingsSaving(true);
+    await settingsDB.remove('school_logo');
+    setSettingsSaving(false);
     window.dispatchEvent(new Event('app_settings_changed'));
   }
 
-  function handleNameChange(val) {
+  async function handleNameChange(val) {
     setSchoolName(val);
-    localStorage.setItem('school_name', val);
+    await settingsDB.set('school_name', val);
     window.dispatchEvent(new Event('app_settings_changed'));
   }
 
@@ -256,16 +269,18 @@ export function AdminPage({ user, onLogout }) {
                         onChange={handleLogoChange}
                       />
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <Button size="sm" variant="secondary" onClick={() => document.getElementById('school-logo-input')?.click()}>
-                          Unggah Logo
+                        <Button size="sm" variant="secondary" disabled={settingsSaving} onClick={() => document.getElementById('school-logo-input')?.click()}>
+                          {settingsSaving ? 'Menyimpan…' : 'Unggah Logo'}
                         </Button>
                         {schoolLogo && (
-                          <Button size="sm" variant="ghost" style={{ color: 'var(--color-danger)', borderColor: '#fecaca' }} onClick={handleRemoveLogo}>
+                          <Button size="sm" variant="ghost" style={{ color: 'var(--color-danger)', borderColor: '#fecaca' }} disabled={settingsSaving} onClick={handleRemoveLogo}>
                             Hapus
                           </Button>
                         )}
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Format JPG/PNG, maks. 1MB.</div>
+                      <div style={{ fontSize: 11, color: settingsSaving ? 'var(--color-primary-600)' : 'var(--text-secondary)', marginTop: 4 }}>
+                        {settingsSaving ? '☁ Menyimpan ke server…' : 'Format JPG/PNG, maks. 1MB. Tersinkronisasi antar perangkat.'}
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -7,4 +7,5 @@ export { siswaService  as siswaDB  } from './siswa';
 export { sesiService   as sesiDB   } from './sesi';
 export { absensiService as absensiDB } from './absensi';
 export { izinService   as izinDB   } from './izin';
-export { usersService  as usersDB  } from './users';
+export { usersService   as usersDB    } from './users';
+export { settingsService as settingsDB } from './settings';

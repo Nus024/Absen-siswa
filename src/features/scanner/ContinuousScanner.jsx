@@ -204,21 +204,20 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
     }
   }, []);
 
-  // ── Start camera ───────────────────────────────────────
-  const startCamera = useCallback(async () => {
-    if (!mountedRef.current) return;
-    console.log(
-      '[CAMERA START]',
-      {
-        timestamp: Date.now(),
-        status,
-        mounted: mountedRef.current,
-        streamExists: !!streamRef.current,
-        globalStreamExists: !!_globalStream,
-      }
-    );
-    setStatus('requesting');
-    setErrMsg('');
+// ── Start camera ───────────────────────────────────────
+   const startCamera = useCallback(async () => {
+     if (!mountedRef.current) return;
+     console.log(
+       '[CAMERA START]',
+       {
+         timestamp: Date.now(),
+         mounted: mountedRef.current,
+         streamExists: !!streamRef.current,
+         globalStreamExists: !!_globalStream,
+       }
+     );
+     setStatus('requesting');
+     setErrMsg('');
 
     // 1. Validasi Environment (HTTPS)
     if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -430,20 +429,20 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
         setErrMsg('Gagal mengakses kamera. Silakan coba lagi atau muat ulang halaman.');
       }
     }
-  }, [startScanLoop, stopActiveStream]);
+  }, []); // No deps - uses refs for mutable values
 
-  // ── Stop & cleanup ─────────────────────────────────────
-  const stopScanner = useCallback(() => {
-    console.log('[STOP SCANNER]');
-    cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-    const video = videoRef.current;
-    if (video) {
-      video.pause();
-      video.srcObject = null;
-    }
-    stopActiveStream();
-  }, [stopActiveStream]);
+// ── Stop & cleanup ─────────────────────────────────────
+   const stopScanner = useCallback(() => {
+     console.log('[STOP SCANNER]');
+     cancelAnimationFrame(rafRef.current);
+     rafRef.current = null;
+     const video = videoRef.current;
+     if (video) {
+       video.pause();
+       video.srcObject = null;
+     }
+     stopActiveStream();
+   }, []); // No deps - uses refs for mutable values
 
   // ── Toggle torch (flashlight) ──────────────────────────
   const toggleTorch = useCallback(async () => {
@@ -470,35 +469,35 @@ export function ContinuousScanner({ onScanSuccess, active = true, paused = false
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [status, startScanLoop]);
 
-  // ── Mount/unmount ──────────────────────────────────────
-  useEffect(() => {
-    mountedRef.current = true;
-    // Setup canvas context sekali
-    if (canvasRef.current) {
-      ctxRef.current = canvasRef.current.getContext('2d', {
-        willReadFrequently: true, // perf hint untuk readPixels
-      });
-    }
+// ── Mount/unmount ──────────────────────────────────────
+   useEffect(() => {
+     mountedRef.current = true;
+     // Setup canvas context sekali
+     if (canvasRef.current) {
+       ctxRef.current = canvasRef.current.getContext('2d', {
+         willReadFrequently: true, // perf hint untuk readPixels
+       });
+     }
 
-    if (active) startCamera();
+     if (active) startCamera();
 
-    return () => {
-      mountedRef.current = false;
-      cancelAnimationFrame(rafRef.current);
-      stopScanner();
-    };
-  }, [active, startCamera, stopScanner]);
+     return () => {
+       mountedRef.current = false;
+       cancelAnimationFrame(rafRef.current);
+       stopScanner();
+     };
+   }, [active]); // Removed startCamera/stopScanner - stable functions
 
-  // ── Pause/resume saat `active` prop berubah ────────────
-  useEffect(() => {
-    if (!mountedRef.current) return;
-    if (active && (status === 'idle' || status === 'paused')) {
-      startCamera();
-    } else if (!active) {
-      stopScanner();
-      setStatus('paused');
-    }
-  }, [active, status, startCamera, stopScanner]);
+// ── Pause/resume saat `active` prop berubah ────────────
+   useEffect(() => {
+     if (!mountedRef.current) return;
+     if (active && (status === 'idle' || status === 'paused')) {
+       startCamera();
+     } else if (!active) {
+       stopScanner();
+       setStatus('paused');
+     }
+   }, [active, status]); // Removed startCamera/stopScanner deps - they're stable now
 
   // ── Watchdog 5 Detik saat status active ────────────────
   useEffect(() => {
