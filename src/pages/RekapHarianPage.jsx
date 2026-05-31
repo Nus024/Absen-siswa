@@ -75,17 +75,17 @@ function StatusPopover({ cellRef, current, onSelect, onClose }) {
 function AttendanceCell({ siswa, sesi, record, canEdit, onUpdate }) {
   const [open, setOpen] = useState(false);
   const cellRef = useRef(null);
-  const status = record?.status || 'alpha';
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.alpha;
+  const status = record?.status || null;
+  const cfg = status ? STATUS_CONFIG[status] : null;
 
   return (
     <div ref={cellRef} style={{ display: 'inline-block' }}>
       <button style={{ background: 'transparent', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: 0 }}
-        onClick={canEdit ? () => setOpen(v => !v) : undefined} title={cfg.label}>
-        <Badge variant={cfg.variant}>{cfg.code}</Badge>
+        onClick={canEdit ? () => setOpen(v => !v) : undefined} title={cfg ? cfg.label : 'Belum Absen'}>
+        <Badge variant={cfg ? cfg.variant : 'default'}>{cfg ? cfg.code : '-'}</Badge>
       </button>
       {open && canEdit && (
-        <StatusPopover cellRef={cellRef} current={status}
+        <StatusPopover cellRef={cellRef} current={status || 'alpha'}
           onSelect={(newStatus) => onUpdate(siswa, sesi, record, newStatus)}
           onClose={() => setOpen(false)} />
       )}
@@ -175,7 +175,7 @@ export function RekapHarianPage({ user }) {
     siswas.forEach(sw => {
       const first = sesis.map(se => absensiMap[`${sw.id}_${se.id}`]).find(Boolean);
       const st = first?.status;
-      if (!st) { s.A++; return; }
+      if (!st) return;
       const code = STATUS_CONFIG[st]?.code || 'A';
       s[code] = (s[code] || 0) + 1;
     });
@@ -366,7 +366,7 @@ export function RekapHarianPage({ user }) {
                 let H = 0, I = 0, S = 0, A = 0;
                 sesis.forEach(se => {
                   const rec = absensiMap[`${sw.id}_${se.id}`];
-                  if (!rec) { A++; return; }
+                  if (!rec) return;
                   if (rec.status === 'hadir') H++;
                   else if (rec.status === 'izin') I++;
                   else if (rec.status === 'sakit') S++;

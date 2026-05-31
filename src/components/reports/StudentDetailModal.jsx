@@ -236,7 +236,7 @@ export default function StudentDetailModal({ siswa, sesis, defaultBulan, default
                           {r.status ? (
                             <Badge variant={r.status}>{STATUS_ABSENSI[r.status]?.code}</Badge>
                           ) : (
-                            <span style={{ color: 'var(--color-neutral-300)' }}>—</span>
+                            <span style={{ color: 'var(--color-neutral-400)' }}>-</span>
                           )}
                         </td>
                         <td style={{ padding: '8px 12px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{r.waktuScan}</td>

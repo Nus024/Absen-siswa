@@ -24,7 +24,7 @@ export function exportRekapBulanan({ siswas, absensiMap, sesis, bulan, tahun, na
       const dateStr = `${tahun}-${bulan.toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
       const key = `${siswa.id}_${dateStr}`;
       const s = absensiMap[key];
-      if (!s) return '';
+      if (!s) return '-';
       if (s === 'hadir') H++;
       else if (s === 'izin') I++;
       else if (s === 'sakit') S++;
@@ -57,7 +57,8 @@ export function exportRekapHarian({ siswas, absensiByDate, sesis, tanggal, namaK
   const dataRows = siswas.map((siswa, idx) => {
     const sesiValues = sesis.map(sesi => {
       const key = `${siswa.id}_${sesi.id}_${tanggal}`;
-      const status = absensiByDate[key] || 'A';
+      const status = absensiByDate[key] || null;
+      if (!status) return '-';
       const codes = { hadir: 'H', izin: 'I', sakit: 'S', alpha: 'A' };
       return codes[status] || status;
     });
@@ -101,7 +102,7 @@ export function exportDetailSiswa({ siswa, displayRows, startDate, endDate }) {
       idx + 1,
       r.date,
       r.sesiNama,
-      r.status ? (codes[r.status] || r.status) : '—',
+      r.status ? (codes[r.status] || r.status) : '-',
       r.waktuScan,
       r.catatan
     ];
@@ -173,7 +174,7 @@ export function exportDetailSiswaBulk({ siswas, absensiData, sesis, startDate, e
           siswa.kelas_nama || '',
           date,
           sesi.nama,
-          status ? (codes[status] || status) : '—',
+          status ? (codes[status] || status) : '-',
           waktuScan,
           catatan
         ]);
@@ -222,7 +223,7 @@ export function exportDetailSiswaBulk({ siswas, absensiData, sesis, startDate, e
             sIdx++,
             date,
             sesi.nama,
-            status ? (codes[status] || status) : '—',
+            status ? (codes[status] || status) : '-',
             waktuScan,
             catatan
           ]);

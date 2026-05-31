@@ -258,7 +258,7 @@ export function RekapBulananPage({ user }) {
                         return (
                           <td key={d} style={{ padding: '4px', textAlign: 'center' }}>
                             {st ? <Badge variant={st}>{STATUS_ABSENSI[st]?.code}</Badge>
-                                : <span style={{ color: 'var(--color-neutral-300)' }}>·</span>}
+                                : <span style={{ color: 'var(--color-neutral-400)' }}>-</span>}
                           </td>
                         );
                       })}
