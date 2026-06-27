@@ -1,5 +1,5 @@
 // ============================================================
-// App.jsx — root dengan layout shell premium + Supabase auth
+// App.jsx — root dengan layout shell premium + Google Sheets REST API auth
 // ============================================================
 import { Component, lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';

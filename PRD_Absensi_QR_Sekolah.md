@@ -58,7 +58,7 @@ Contoh: `SISWA:550e8400-e29b-41d4-a716-446655440000`
 - Simpan token di database, QR tidak perlu disimpan (generate ulang saat cetak).
 
 ### 2.3 Validasi QR Saat Scan (Tanpa DB Lookup)
-Di backend (Supabase Edge Function) atau RLS:
+Di backend (Google Sheets REST API Edge Function) atau RLS:
 ```sql
 -- Cek apakah token ada di tabel siswa dan status active
 SELECT 1 FROM siswa WHERE qr_token = 'uuid_from_qr' AND qr_status = 'active';
@@ -191,7 +191,7 @@ CREATE INDEX idx_izin_status ON izin_keluar(status) WHERE status='keluar';
 ```
 
 ### 5.1 Cleanup Strategy
-- Cron job (Supabase Edge Function) setiap tanggal 1 jam 02:00:
+- Cron job (Google Sheets REST API Edge Function) setiap tanggal 1 jam 02:00:
   - Hapus izin_keluar dengan status 'kembali' dan waktu_kembali < 90 hari.
   - Pindahkan absensi dengan tanggal < 180 hari ke archive.
 
@@ -319,7 +319,7 @@ src/
 │       ├── ManageSiswa.jsx
 │       └── ManageKelas.jsx
 ├── lib/
-│   ├── supabaseClient.js
+│   ├── google sheets REST apiClient.js
 │   ├── indexedDB.js
 │   └── constants.js
 ├── hooks/
@@ -339,7 +339,7 @@ src/
 ```
 
 ### 10.1 Deployment (Vercel)
-- Environment variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+- Environment variables: `VITE_GOOGLE_SHEETS_URL`, `VITE_GOOGLE_SHEETS_ANON_KEY`.
 - Build: `npm run build` → output `dist/` → deploy ke Vercel (gratis).
 
 ---

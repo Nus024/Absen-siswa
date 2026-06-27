@@ -11,9 +11,6 @@ export default defineConfig({
             if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
               return 'react-vendor';
             }
-            if (id.includes('@supabase') || id.includes('supabase') || id.includes('websocket') || id.includes('postgrest') || id.includes('functions-js')) {
-              return 'supabase-vendor';
-            }
             if (id.includes('lucide-react')) {
               return 'lucide-vendor';
             }

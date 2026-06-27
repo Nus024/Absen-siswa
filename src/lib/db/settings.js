@@ -1,22 +1,4 @@
-// ============================================================
-// lib/db/settings.js — App settings via Supabase (sinkron antar perangkat)
-// ============================================================
-import { supabase } from '../supabase';
-
-/**
- * Tabel `app_settings` di Supabase:
- *   id    TEXT PRIMARY KEY  (misal: 'school_name', 'school_logo')
- *   value TEXT
- *
- * SQL untuk buat tabel (jalankan sekali di Supabase SQL Editor):
- *
- *   CREATE TABLE IF NOT EXISTS app_settings (
- *     id    TEXT PRIMARY KEY,
- *     value TEXT
- *   );
- *   ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
- *   CREATE POLICY "allow_all" ON app_settings FOR ALL USING (true) WITH CHECK (true);
- */
+import { apiClient } from '../../api/apiClient';
 
 const LS_KEYS = {
   school_name: 'school_name',
@@ -24,32 +6,27 @@ const LS_KEYS = {
 };
 
 export const settingsService = {
-  /** Ambil semua settings sebagai object { school_name, school_logo } */
   async getAll() {
     try {
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('id, value');
-      if (error) throw error;
-
-      const result = {};
-      (data || []).forEach(row => { result[row.id] = row.value; });
-
-      // Sync ke localStorage sebagai cache lokal
+      const data = await apiClient.get('/settings');
+      
+      // Sinkronisasi ke localStorage sebagai cache local
       Object.entries(LS_KEYS).forEach(([key]) => {
-        if (result[key] !== undefined) {
-          if (result[key]) {
-            localStorage.setItem(key, result[key]);
+        if (data[key] !== undefined) {
+          if (data[key]) {
+            localStorage.setItem(key, data[key]);
           } else {
             localStorage.removeItem(key);
           }
         }
       });
 
-      return result;
+      return {
+        school_name: data.school_name || '',
+        school_logo: data.school_logo || '',
+      };
     } catch (err) {
-      console.warn('[settings] Gagal baca dari Supabase, pakai cache lokal:', err.message);
-      // Fallback ke localStorage
+      console.warn('[settings] Gagal membaca pengaturan dari API, memakai cache lokal:', err.message);
       return {
         school_name: localStorage.getItem('school_name') || '',
         school_logo: localStorage.getItem('school_logo') || '',
@@ -57,54 +34,38 @@ export const settingsService = {
     }
   },
 
-  /** Ambil satu nilai setting */
   async get(key) {
     try {
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('id', key)
-        .maybeSingle();
-      if (error) throw error;
-      const val = data?.value ?? null;
-      // Sync cache
+      const data = await apiClient.get('/settings');
+      const val = data[key] ?? null;
       if (val) localStorage.setItem(key, val);
       else localStorage.removeItem(key);
       return val;
     } catch (err) {
-      console.warn('[settings] Gagal get dari Supabase, pakai cache lokal:', err.message);
+      console.warn('[settings] Gagal memuat dari API, memakai cache lokal:', err.message);
       return localStorage.getItem(key) || null;
     }
   },
 
-  /** Simpan / update satu setting (upsert) */
   async set(key, value) {
     try {
-      const { error } = await supabase
-        .from('app_settings')
-        .upsert({ id: key, value: value ?? '' }, { onConflict: 'id' });
-      if (error) throw error;
-      // Sync cache
+      await apiClient.post('/settings', { key, value });
       if (value) localStorage.setItem(key, value);
       else localStorage.removeItem(key);
     } catch (err) {
-      console.warn('[settings] Gagal simpan ke Supabase, simpan lokal saja:', err.message);
+      console.warn('[settings] Gagal menyimpan ke API, menyimpan di lokal saja:', err.message);
       if (value) localStorage.setItem(key, value);
       else localStorage.removeItem(key);
     }
   },
 
-  /** Hapus satu setting */
   async remove(key) {
     try {
-      const { error } = await supabase
-        .from('app_settings')
-        .delete()
-        .eq('id', key);
-      if (error) throw error;
+      // Mengosongkan value key lewat endpoint POST /settings
+      await apiClient.post('/settings', { key, value: '' });
       localStorage.removeItem(key);
     } catch (err) {
-      console.warn('[settings] Gagal hapus dari Supabase:', err.message);
+      console.warn('[settings] Gagal menghapus dari API:', err.message);
       localStorage.removeItem(key);
     }
   },

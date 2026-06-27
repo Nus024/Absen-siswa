@@ -11,7 +11,7 @@ export default function Layout({ user, onLogout, children }) {
   const [appName, setAppName] = useState(localStorage.getItem('school_name') || 'Absensi QR');
   const [appLogo, setAppLogo] = useState(localStorage.getItem('school_logo') || '');
 
-  // Load dari Supabase saat pertama kali mount
+  // Load dari Google Sheets REST API saat pertama kali mount
   useEffect(() => {
     settingsDB.getAll().then(s => {
       if (s.school_name) setAppName(s.school_name);

@@ -1,0 +1,12 @@
+[2026-06-27T09:27:35.961Z] [ERROR] [BaseRepo] Gagal membaca sheet USERS: error:1E08010C:DECODER routines::unsupported 
+[2026-06-27T09:27:35.962Z] [ERROR] [BaseRepo] Gagal membaca sheet SISWA: error:1E08010C:DECODER routines::unsupported 
+[2026-06-27T09:27:35.963Z] [ERROR] [BaseRepo] Gagal membaca sheet KELAS: error:1E08010C:DECODER routines::unsupported 
+[2026-06-27T09:27:35.964Z] [ERROR] [BaseRepo] Gagal membaca sheet SESI: error:1E08010C:DECODER routines::unsupported 
+[2026-06-27T09:27:35.965Z] [ERROR] [BaseRepo] Gagal membaca sheet SETTINGS: error:1E08010C:DECODER routines::unsupported 
+[2026-06-27T09:27:35.966Z] [ERROR] Gagal memuat cache dari Google Sheets: error:1E08010C:DECODER routines::unsupported 
+[2026-06-27T09:33:03.813Z] [ERROR] [BaseRepo] Gagal membaca sheet KELAS: The caller does not have permission 
+[2026-06-27T09:33:03.814Z] [ERROR] Gagal memuat cache dari Google Sheets: The caller does not have permission 
+[2026-06-27T09:33:03.922Z] [ERROR] [BaseRepo] Gagal membaca sheet SETTINGS: The caller does not have permission 
+[2026-06-27T09:33:03.991Z] [ERROR] [BaseRepo] Gagal membaca sheet SISWA: The caller does not have permission 
+[2026-06-27T09:33:04.045Z] [ERROR] [BaseRepo] Gagal membaca sheet SESI: The caller does not have permission 
+[2026-06-27T09:33:04.100Z] [ERROR] [BaseRepo] Gagal membaca sheet USERS: The caller does not have permission 

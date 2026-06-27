@@ -1,198 +1,79 @@
-// ============================================================
-// lib/db/absensi.js — CRUD absensi via Supabase
-// ============================================================
-import { supabase } from '../supabase';
-import { todayStr } from '../constants';
+import { apiClient } from '../../api/apiClient';
 
 export const absensiService = {
   async getByTanggal(tanggal) {
-    const { data, error } = await supabase
-      .from('absensi')
-      .select(`
-        *,
-        siswa:siswa_id(id, nis, nama, kelas_id),
-        sesi:sesi_id(id, nama, urutan)
-      `)
-      .eq('tanggal', tanggal)
-      .order('waktu_scan', { ascending: true });
-    if (error) throw error;
-    return data;
+    return apiClient.get(`/attendance?date=${tanggal}`);
   },
 
   async getByTanggalSesi(tanggal, sesiId) {
-    const { data, error } = await supabase
-      .from('absensi')
-      .select(`
-        *,
-        siswa:siswa_id(id, nis, nama, kelas_id),
-        sesi:sesi_id(id, nama, urutan)
-      `)
-      .eq('tanggal', tanggal)
-      .eq('sesi_id', sesiId);
-    if (error) throw error;
-    return data;
+    return apiClient.get(`/attendance?date=${tanggal}&session=${sesiId}`);
   },
 
   async getByTanggalKelas(tanggal, kelasId) {
-    const { data, error } = await supabase
-      .from('absensi')
-      .select(`
-        *,
-        siswa:siswa_id!inner(id, nis, nama, kelas_id),
-        sesi:sesi_id(id, nama, urutan)
-      `)
-      .eq('tanggal', tanggal)
-      .eq('siswa.kelas_id', kelasId)
-      .order('waktu_scan', { ascending: true });
-    if (error) throw error;
-    return data;
+    return apiClient.get(`/attendance?date=${tanggal}&class=${kelasId}`);
   },
 
   async getByMonth(year, month) {
-    const from = `${year}-${String(month).padStart(2, '0')}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const to   = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
-    const { data, error } = await supabase
-      .from('absensi')
-      .select(`
-        *,
-        siswa:siswa_id(id, nis, nama, kelas_id),
-        sesi:sesi_id(id, nama, urutan)
-      `)
-      .gte('tanggal', from)
-      .lte('tanggal', to)
-      .order('tanggal');
-    if (error) throw error;
-    return data;
+    return apiClient.get(`/attendance?year=${year}&month=${month}`);
   },
 
   async getBySiswaMonth(siswaId, year, month) {
-    const from = `${year}-${String(month).padStart(2, '0')}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const to   = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
-    const { data, error } = await supabase
-      .from('absensi')
-      .select('*, sesi:sesi_id(id, nama, urutan)')
-      .eq('siswa_id', siswaId)
-      .gte('tanggal', from)
-      .lte('tanggal', to)
-      .order('tanggal');
-    if (error) throw error;
-    return data;
+    return apiClient.get(`/attendance?student=${siswaId}&year=${year}&month=${month}`);
   },
 
   async getBySiswaDateRange(siswaId, startDateStr, endDateStr) {
-    const { data, error } = await supabase
-      .from('absensi')
-      .select('*, sesi:sesi_id(id, nama, urutan)')
-      .eq('siswa_id', siswaId)
-      .gte('tanggal', startDateStr)
-      .lte('tanggal', endDateStr)
-      .order('tanggal', { ascending: true })
-      .order('waktu_scan', { ascending: true });
-    if (error) throw error;
-    return data;
+    return apiClient.get(`/attendance?student=${siswaId}&start_date=${startDateStr}&end_date=${endDateStr}`);
   },
 
   async getBySiswaIdsDateRange(siswaIds, startDateStr, endDateStr) {
-    const { data, error } = await supabase
-      .from('absensi')
-      .select(`
-        *,
-        siswa:siswa_id(id, nis, nama, kelas_id),
-        sesi:sesi_id(id, nama, urutan)
-      `)
-      .in('siswa_id', siswaIds)
-      .gte('tanggal', startDateStr)
-      .lte('tanggal', endDateStr)
-      .order('tanggal', { ascending: true })
-      .order('waktu_scan', { ascending: true });
-    if (error) throw error;
-    return data;
+    const idsStr = Array.isArray(siswaIds) ? siswaIds.join(',') : siswaIds;
+    return apiClient.get(`/attendance?student_ids=${idsStr}&start_date=${startDateStr}&end_date=${endDateStr}`);
   },
 
   async existsScan(siswaId, sesiId, tanggal) {
-    const { count, error } = await supabase
-      .from('absensi')
-      .select('id', { count: 'exact', head: true })
-      .eq('siswa_id', siswaId)
-      .eq('sesi_id', sesiId)
-      .eq('tanggal', tanggal);
-    if (error) return false;
-    return (count ?? 0) > 0;
+    const res = await apiClient.get(`/attendance/check-duplicate?student_id=${siswaId}&session_id=${sesiId}&date=${tanggal}`);
+    return res?.exists || false;
   },
 
   async create(payload) {
-    const item = {
+    return apiClient.post('/attendance', {
       siswa_id:   payload.siswa_id,
       sesi_id:    payload.sesi_id,
-      tanggal:    payload.tanggal ?? todayStr(),
-      status:     payload.status ?? 'hadir',
-      catatan:    payload.catatan ?? '',
-      waktu_scan: new Date().toISOString(),
-      petugas_id: payload.petugas_id ?? null,
-    };
-    const { data, error } = await supabase
-      .from('absensi')
-      .insert(item)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+      tanggal:    payload.tanggal,
+      status:     payload.status,
+      catatan:    payload.catatan,
+      petugas_id: payload.petugas_id
+    });
   },
 
   async update(id, payload) {
-    const { data, error } = await supabase
-      .from('absensi')
-      .update(payload)
-      .eq('id', id)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+    return apiClient.put(`/attendance/${id}`, payload);
   },
 
   async delete(id) {
-    const { error } = await supabase
-      .from('absensi')
-      .delete()
-      .eq('id', id);
-    if (error) throw error;
+    await apiClient.delete(`/attendance/${id}`);
   },
 
   async bulkCreate(items) {
-    const rows = items.map(it => ({
+    const mapped = (items || []).map(it => ({
       siswa_id:   it.siswa_id,
       sesi_id:    it.sesi_id,
-      tanggal:    it.tanggal ?? todayStr(),
-      status:     it.status ?? 'hadir',
-      catatan:    it.catatan ?? '',
-      waktu_scan: new Date().toISOString(),
-      petugas_id: it.petugas_id ?? null,
+      tanggal:    it.tanggal,
+      status:     it.status,
+      catatan:    it.catatan,
+      petugas_id: it.petugas_id
     }));
-    const { data, error } = await supabase
-      .from('absensi')
-      .insert(rows)
-      .select();
-    if (error) throw error;
-    return data;
+    return apiClient.post('/attendance/bulk', { items: mapped });
   },
 
-  // Upsert: create atau update jika sudah ada (untuk isi manual)
   async upsert(payload) {
-    const item = {
+    // Di backend, attendanceService.upsert akan menangani logika ini
+    return apiClient.post('/attendance', {
       siswa_id: payload.siswa_id,
       sesi_id:  payload.sesi_id,
       tanggal:  payload.tanggal,
-      status:   payload.status ?? 'hadir',
-      catatan:  payload.catatan ?? '',
-    };
-    const { data, error } = await supabase
-      .from('absensi')
-      .upsert(item, { onConflict: 'siswa_id,sesi_id,tanggal' })
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+      status:   payload.status || 'hadir',
+      catatan:  payload.catatan || ''
+    });
   },
 };

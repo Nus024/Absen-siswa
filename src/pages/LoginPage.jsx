@@ -16,7 +16,7 @@ export function LoginPage({ onLogin }) {
   const [schoolName, setSchoolName] = useState(localStorage.getItem('school_name') || 'Absensi Siswa');
   const [schoolLogo, setSchoolLogo] = useState(localStorage.getItem('school_logo') || '');
 
-  // Load nama & logo dari Supabase saat pertama kali buka halaman login
+  // Load nama & logo dari Google Sheets REST API saat pertama kali buka halaman login
   useEffect(() => {
     settingsDB.getAll().then(s => {
       if (s.school_name) setSchoolName(s.school_name);

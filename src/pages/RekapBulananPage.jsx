@@ -1,5 +1,5 @@
 // ============================================================
-// pages/RekapBulananPage.jsx — Rekap bulanan via Supabase
+// pages/RekapBulananPage.jsx — Rekap bulanan via Google Sheets REST API
 // ============================================================
 import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';

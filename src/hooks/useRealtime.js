@@ -1,92 +1,33 @@
-// ============================================================
-// hooks/useRealtime.js — Supabase Realtime subscription hook
-// ============================================================
-import { useEffect, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import { useEffect } from 'react';
 
 /**
- * Subscribe ke perubahan realtime pada satu tabel Supabase.
- *
- * @param {string}   table    - Nama tabel (e.g. 'absensi')
- * @param {Function} onChange - Callback dipanggil saat ada INSERT/UPDATE/DELETE
- * @param {Object}   filter   - Optional filter: { column, value }
- *
- * Contoh penggunaan:
- *   useRealtime('absensi', () => fetchData(), { column: 'tanggal', value: '2025-01-01' });
+ * Polling fallback sebagai pengganti realtime Google Sheets REST API.
+ * Mengambil data berkala setiap 10 detik agar tampilan tetap diperbarui secara otomatis.
  */
 export function useRealtime(table, onChange, filter = null) {
-  const channelRef = useRef(null);
-
   useEffect(() => {
     if (!table || !onChange) return;
 
-    const channelName = filter
-      ? `realtime:${table}:${filter.column}=${filter.value}`
-      : `realtime:${table}`;
-
-    let channel = supabase.channel(channelName);
-
-    const config = {
-      event:  '*',
-      schema: 'public',
-      table,
-    };
-
-    if (filter) {
-      config.filter = `${filter.column}=eq.${filter.value}`;
-    }
-
-    channel = channel.on('postgres_changes', config, (payload) => {
-      onChange(payload);
-    });
-
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        console.log(`[Realtime] subscribed to ${channelName}`);
-      }
-    });
-
-    channelRef.current = channel;
+    const interval = setInterval(() => {
+      onChange();
+    }, 10000); // Poll setiap 10 detik
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(interval);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table, filter?.column, filter?.value]);
+  }, [table, onChange]);
 }
 
-/**
- * Subscribe ke beberapa tabel sekaligus.
- * @param {Array<{table: string, filter?: Object}>} subscriptions
- * @param {Function} onChange
- */
 export function useRealtimeMulti(subscriptions, onChange) {
-  const channelRef = useRef(null);
-
   useEffect(() => {
     if (!subscriptions?.length || !onChange) return;
 
-    const channelName = `realtime:multi:${subscriptions.map(s => s.table).join('+')}`;
-    let channel = supabase.channel(channelName);
-
-    for (const sub of subscriptions) {
-      const config = {
-        event:  '*',
-        schema: 'public',
-        table:  sub.table,
-      };
-      if (sub.filter) {
-        config.filter = `${sub.filter.column}=eq.${sub.filter.value}`;
-      }
-      channel = channel.on('postgres_changes', config, onChange);
-    }
-
-    channel.subscribe();
-    channelRef.current = channel;
+    const interval = setInterval(() => {
+      onChange();
+    }, 10000);
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(interval);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [subscriptions, onChange]);
 }

@@ -1,6 +1,6 @@
 // ============================================================
-// lib/localDB.js — localStorage wrapper sebagai pengganti Supabase
-// (swap ke supabaseClient.js nanti saat sudah ada credentials)
+// lib/localDB.js — localStorage wrapper sebagai pengganti Google Sheets REST API
+// (swap ke google sheets REST apiClient.js nanti saat sudah ada credentials)
 // ============================================================
 import { v4 as uuidv4 } from 'uuid';
 

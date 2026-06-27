@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "npm --prefix backend start",
+    "server:dev": "npm --prefix backend run dev",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.106.2",
     "html5-qrcode": "^2.3.8",
     "jimp": "^1.6.1",
     "jsqr": "^1.4.0",

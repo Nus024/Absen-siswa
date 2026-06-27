@@ -1,59 +1,49 @@
-// ============================================================
-// lib/db/sesi.js — CRUD sesi absensi via Supabase
-// ============================================================
-import { supabase } from '../supabase';
+import { apiClient } from '../../api/apiClient';
+
+const mapSession = (s) => {
+  if (!s) return null;
+  return {
+    id:          s.SESI_ID || s.id,
+    nama:        s.NAMA || s.nama || '',
+    jam_mulai:   s.JAM_MULAI || s.jam_mulai || '',
+    jam_selesai: s.JAM_SELESAI || s.jam_selesai || '',
+    urutan:      s.URUTAN !== undefined ? s.URUTAN : s.urutan,
+    status:      s.STATUS || s.status || ''
+  };
+};
 
 export const sesiService = {
   async getAll() {
-    const { data, error } = await supabase
-      .from('sesi_absensi')
-      .select('*')
-      .order('urutan');
-    if (error) throw error;
-    return data;
+    const list = await apiClient.get('/sessions');
+    return (list || []).map(mapSession);
   },
 
   async getById(id) {
-    const { data, error } = await supabase
-      .from('sesi_absensi')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (error) throw error;
-    return data;
+    const s = await apiClient.get(`/sessions/${id}`);
+    return mapSession(s);
   },
 
   async create(payload) {
-    const { data, error } = await supabase
-      .from('sesi_absensi')
-      .insert({
-        nama:        payload.nama,
-        jam_mulai:   payload.jam_mulai,
-        jam_selesai: payload.jam_selesai,
-        urutan:      payload.urutan ?? 1,
-      })
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+    const s = await apiClient.post('/sessions', {
+      nama:        payload.nama,
+      jam_mulai:   payload.jam_mulai,
+      jam_selesai: payload.jam_selesai,
+      urutan:      payload.urutan
+    });
+    return mapSession(s);
   },
 
   async update(id, payload) {
-    const { data, error } = await supabase
-      .from('sesi_absensi')
-      .update(payload)
-      .eq('id', id)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+    const s = await apiClient.put(`/sessions/${id}`, {
+      nama:        payload.nama,
+      jam_mulai:   payload.jam_mulai,
+      jam_selesai: payload.jam_selesai,
+      urutan:      payload.urutan
+    });
+    return mapSession(s);
   },
 
   async delete(id) {
-    const { error } = await supabase
-      .from('sesi_absensi')
-      .delete()
-      .eq('id', id);
-    if (error) throw error;
-  },
+    await apiClient.delete(`/sessions/${id}`);
+  }
 };

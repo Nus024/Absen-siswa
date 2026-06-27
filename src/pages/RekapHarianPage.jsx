@@ -1,5 +1,5 @@
 // ============================================================
-// pages/RekapHarianPage.jsx — Rekap harian via Supabase + Realtime
+// pages/RekapHarianPage.jsx — Rekap harian via Google Sheets REST API + Realtime
 // ============================================================
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';

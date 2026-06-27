@@ -1,5 +1,5 @@
 // ============================================================
-// pages/ScannerPage.jsx — QR Scanner dengan Supabase realtime
+// pages/ScannerPage.jsx — QR Scanner dengan Google Sheets REST API realtime
 // ============================================================
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ContinuousScanner } from '../features/scanner/ContinuousScanner';
@@ -166,7 +166,7 @@ export function ScannerPage({ user }) {
     vibrate(60);
     audioService.playDetected(); // only audible if enableDetectedSound = true
 
-    // 3. Jalankan Supabase transaksi di background (tidak di-await di main UI thread)
+    // 3. Jalankan Google Sheets REST API transaksi di background (tidak di-await di main UI thread)
     (async () => {
       try {
         let token = null;
@@ -224,7 +224,7 @@ export function ScannerPage({ user }) {
 
           scanCache.set(key, Date.now());
 
-          // Simpan ke Supabase
+          // Simpan ke Google Sheets REST API
           await absensiService.create({
             siswa_id:   siswa.id,
             sesi_id:    activeSesiObj.id,

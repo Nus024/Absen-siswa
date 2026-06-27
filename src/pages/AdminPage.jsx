@@ -130,7 +130,7 @@ export function AdminPage({ user, onLogout }) {
   const [schoolLogo, setSchoolLogo] = useState(localStorage.getItem('school_logo') || '');
   const [settingsSaving, setSettingsSaving] = useState(false);
 
-  // Load settings dari Supabase saat pertama kali buka halaman
+  // Load settings dari Google Sheets REST API saat pertama kali buka halaman
   useEffect(() => {
     settingsDB.getAll().then(s => {
       if (s.school_name) setSchoolName(s.school_name);

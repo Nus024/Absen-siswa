@@ -1,5 +1,5 @@
 // ============================================================
-// hooks/useOfflineSync.js — Sync IndexedDB queue ke Supabase
+// hooks/useOfflineSync.js — Sync IndexedDB queue ke Google Sheets REST API
 // ============================================================
 import { useEffect, useCallback, useState } from 'react';
 import { absensiService } from '../lib/db/absensi';
@@ -42,7 +42,7 @@ export function useOfflineSync() {
       const pending = await safeGetPending();
       if (pending.length === 0) return;
 
-      // Sync ke Supabase dalam batch
+      // Sync ke Google Sheets REST API dalam batch
       const syncedIds = [];
       for (const item of pending) {
         try {
@@ -56,9 +56,12 @@ export function useOfflineSync() {
           });
           syncedIds.push(item.id);
         } catch (err) {
-          // Skip jika duplicate (unique constraint), masih mark as synced
-          if (err?.code === '23505') syncedIds.push(item.id);
-          else console.warn('Gagal sync item:', item.id, err);
+          // Skip jika duplicate (conflict), tetap tandai sebagai tersinkron
+          if (err?.code === '23505' || err?.message?.includes('sudah melakukan presensi')) {
+            syncedIds.push(item.id);
+          } else {
+            console.warn('Gagal sync item:', item.id, err);
+          }
         }
       }
 

@@ -1,6 +1,6 @@
 // ============================================================
-// hooks/useAuth.js — Custom auth via Supabase (Opsi B)
-// Username + password, diverifikasi dengan pgcrypto RPC
+// hooks/useAuth.js — Custom auth via Google Sheets REST API (Opsi B)
+// Username + password, diverifikasi dengan bcryptjs RPC
 // ============================================================
 import { useState, useCallback, useEffect } from 'react';
 import { usersService } from '../lib/db/users';
@@ -28,7 +28,7 @@ export function useAuth() {
   const [loading, setLoading] = useState(false);
   const [authReady, setAuthReady] = useState(true);
 
-  // Login via Supabase custom auth (username + password hashed dengan pgcrypto)
+  // Login via Google Sheets REST API custom auth (username + password hashed dengan bcryptjs)
   const login = useCallback(async (username, password) => {
     setLoading(true);
     try {
@@ -41,6 +41,7 @@ export function useAuth() {
           role:          found.role,
           kelas_ids:     found.kelas_ids     ?? [],
           tingkat_akses: found.tingkat_akses ?? [],
+          token:         found.token,
         };
         storeSession(u);
         setUser(u);
