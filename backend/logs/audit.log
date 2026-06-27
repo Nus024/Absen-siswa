@@ -2,3 +2,8 @@
 [2026-06-27T10:11:08.384Z] [AUDIT] User: admin | Action: LOGIN | Detail: Sukses login sistem
 [2026-06-27T10:13:57.314Z] [AUDIT] User: admin | Action: LOGIN | Detail: Sukses login sistem
 [2026-06-27T10:18:47.808Z] [AUDIT] User: admin | Action: LOGIN | Detail: Sukses login sistem
+[2026-06-27T10:27:37.241Z] [AUDIT] User: admin | Action: LOGIN | Detail: Sukses login sistem
+[2026-06-27T10:31:16.134Z] [AUDIT] User: SYSTEM | Action: UPDATE_USER | Detail: User ID USR000001 berhasil diperbarui
+[2026-06-27T10:31:56.117Z] [AUDIT] User: SYSTEM | Action: CREATE_USER | Detail: User nus berhasil dibuat
+[2026-06-27T10:33:13.512Z] [AUDIT] User: nus | Action: LOGIN | Detail: Sukses login sistem
+[2026-06-27T10:33:48.544Z] [AUDIT] User: nus | Action: LOGIN | Detail: Sukses login sistem
